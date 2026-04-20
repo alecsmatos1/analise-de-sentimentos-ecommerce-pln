@@ -1,39 +1,36 @@
-# Projeto de PLN
+# Analise de Sentimentos em E-commerce com PLN
 
-Projeto academico simples de analise de sentimentos em avaliacoes de e-commerce brasileiro.
+Trabalho universitario de Processamento de Linguagem Natural voltado para classificacao de sentimentos em avaliacoes de e-commerce brasileiro.
 
-## Bases usadas
+## Objetivo
+
+Comparar modelos de classificacao treinados sobre bases de avaliacoes de produtos, usando textos em portugues e combinando diferentes fontes de dados para observar o impacto no desempenho.
+
+## Bases utilizadas
 
 - `B2W-Reviews01` como base principal
 - `Olist Brazilian E-Commerce Public Dataset` como base complementar
-- `Mercado Livre simples` como base complementar real integrada ao pipeline
+- base complementar do Mercado Livre utilizada localmente no experimento
 
-## Dependencias
+## Estrutura do repositorio
 
-Instale as bibliotecas do arquivo `requirements.txt`.
+- `main.py`: pipeline principal de preparo, treinamento e avaliacao
+- `docs/relatorio_final.md`: relatorio consolidado do trabalho
+- `docs/coleta_base_real.md`: documentacao da coleta complementar
+- `docs/coleta_base_real_simples.md`: versao simplificada da coleta
+- `docs/codigo_comentado.md`: explicacao comentada do codigo principal
 
 ## Como executar
 
 ```powershell
 pip install -r requirements.txt
-python collect_meli_reviews_simple.py
 python main.py
 ```
 
-## Ordem metodologica
+## Observacao sobre dados e arquivos locais
 
-- `B2W` como base principal
-- `Olist` como base complementar
-- `Mercado Livre simples` como base complementar adicional
+Os datasets brutos, arquivos gerados durante a execucao e scripts auxiliares de coleta local nao fazem parte da arvore principal do repositorio publicado no GitHub.
 
-## Fluxo
+## Resultado esperado
 
-- coletar ou atualizar a base real simples do Mercado Livre
-- executar o pipeline principal em `main.py`
-- analisar `metricas.csv`, as matrizes de confusao e `docs/relatorio_final.md`
-
-## Saidas
-
-- `metricas.csv`
-- imagens `.png` das matrizes de confusao
-- `docs/relatorio_final.md`
+A execucao do pipeline gera metricas e artefatos de avaliacao usados na analise descrita em `docs/relatorio_final.md`.
