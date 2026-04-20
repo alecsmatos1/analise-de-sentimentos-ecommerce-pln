@@ -37,3 +37,9 @@ cm_*.png
 data/B2W-Reviews01.csv
 data/olist_order_reviews_dataset.csv
 data/raw/*.csv
+data/mercadolivre_reviews.csv
+data/mercadolivre_reviews_simple.csv
+
+# Local data collection scripts
+collect_meli_reviews.py
+collect_meli_reviews_simple.py
