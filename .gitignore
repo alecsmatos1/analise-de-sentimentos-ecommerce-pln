@@ -31,7 +31,6 @@ Thumbs.db
 
 # Project-generated artifacts
 metricas.csv
-cm_*.png
 
 # Raw datasets
 data/B2W-Reviews01.csv
