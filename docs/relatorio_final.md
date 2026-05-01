@@ -2,25 +2,29 @@
 
 ## Introducao
 
-Este projeto apresenta um pipeline simples de analise de sentimentos em avaliacoes de e-commerce brasileiro. A base principal e o corpus B2W-Reviews01. As bases complementares sao o Olist Brazilian E-Commerce Public Dataset e a coleta simples de reviews do Mercado Livre.
+Este projeto apresenta um pipeline de analise de sentimentos em avaliacoes de e-commerce brasileiro. A base principal e o corpus B2W-Reviews01. As bases complementares sao o Olist Brazilian E-Commerce Public Dataset e a coleta simples de reviews do Mercado Livre.
+
+A versao atual do codigo esta organizada em quatro arquivos principais: `main.py`, `data_processing.py`, `sentiment_analyzer.py` e `report_generator.py`. Essa separacao mantem o projeto enxuto, mas divide responsabilidades entre orquestracao, tratamento de dados, analise de sentimento e geracao de relatorios.
 
 ## Base teorica breve
 
 A analise de sentimentos busca classificar a polaridade predominante de um texto. Em reviews de e-commerce, essa tarefa ajuda a resumir a percepcao do consumidor. Neste trabalho, a polaridade foi inferida a partir da nota da avaliacao, com tres classes: negativo, neutro e positivo.
 
+O projeto compara modelos supervisionados classicos com um analisador simbolico baseado em regras. Os modelos supervisionados usam TF-IDF com Regressao Logistica e Linear SVC. O analisador simbolico usa lexicos e padroes discursivos simples, sem dependencias externas como LIWC, WordNet-PT ou spaCy.
+
 ## Bases de dados
 
 - B2W-Reviews01: base principal, em portugues brasileiro, com reviews de produtos do comercio eletronico.
 - Olist Brazilian E-Commerce Public Dataset: base complementar, usando a tabela de reviews.
-- Mercado Livre simples: base complementar real obtida por coleta via API oficial, integrada ao pipeline no mesmo formato das demais bases.
+- Mercado Livre simples: base complementar real obtida por coleta via API oficial, integrada ao pipeline quando o arquivo local esta disponivel.
 
-Disponibilidade na execucao:
+Disponibilidade registrada na ultima execucao:
 
 - B2W: arquivo local
 - Olist: arquivo local
 - Mercado Livre simples: arquivo local
 
-Resumo dos conjuntos usados:
+Resumo dos conjuntos usados na ultima execucao registrada:
 
 experimento | linhas | negativo | neutro | positivo
 --- | --- | --- | --- | ---
@@ -31,9 +35,13 @@ b2w_mais_olist_mais_meli_simples | 176842 | 47355 | 20078 | 109409
 
 ## Metodologia
 
-O pipeline seguiu as etapas de carregamento dos dados, uniao dos campos textuais, limpeza simples do texto, rotulagem por nota (1-2 negativo, 3 neutro, 4-5 positivo), vetorizacao com TF-IDF, treinamento de Regressao Logistica e Linear SVC e avaliacao com accuracy, precision, recall, F1-score macro e matriz de confusao. Foram considerados o experimento principal com B2W e experimentos combinados com Olist e Mercado Livre simples.
+O pipeline segue as etapas de carregamento dos dados, uniao dos campos textuais, limpeza simples do texto, rotulagem por nota, vetorizacao com TF-IDF, treinamento dos modelos supervisionados e avaliacao com accuracy, precision, recall, F1-score macro e matriz de confusao.
 
-## Resultados
+Na versao atual do codigo, tambem e executado um baseline simbolico chamado `symbolic_rules`. Esse analisador usa o texto bruto da review e aplica regras de dominio, como sinais de nao recebimento, defeito, entrega, devolucao, expectativa violada, custo-beneficio, recomendacao, contraste, concessao, intensificacao e shifters de polaridade.
+
+Os resultados abaixo refletem a ultima execucao registrada antes da inclusao das linhas `symbolic_rules` em `metricas.csv`. Ao executar `python main.py` na versao atual, o arquivo de metricas e o relatorio final passam a incluir tambem o analisador simbolico para cada experimento.
+
+## Resultados registrados
 
 experimento | modelo | linhas | accuracy | precision_macro | recall_macro | f1_macro | matriz_confusao
 --- | --- | --- | --- | --- | --- | --- | ---
@@ -46,18 +54,20 @@ b2w_mais_meli_simples | linear_svc | 133612 | 0.8518 | 0.7517 | 0.7525 | 0.7517 
 b2w_mais_olist_mais_meli_simples | logistic_regression | 176842 | 0.8204 | 0.7243 | 0.7678 | 0.7373 | cm_b2w_mais_olist_mais_meli_simples_logistic_regression.png
 b2w_mais_olist_mais_meli_simples | linear_svc | 176842 | 0.8446 | 0.7278 | 0.7278 | 0.7272 | cm_b2w_mais_olist_mais_meli_simples_linear_svc.png
 
-- b2w_mais_meli_simples: melhor F1 macro = 0.7684 com logistic_regression.
-- b2w_mais_olist: melhor F1 macro = 0.7349 com logistic_regression.
-- b2w_mais_olist_mais_meli_simples: melhor F1 macro = 0.7373 com logistic_regression.
-- b2w_principal: melhor F1 macro = 0.7688 com logistic_regression.
+- b2w_principal: melhor F1 macro registrado = 0.7688 com logistic_regression.
+- b2w_mais_meli_simples: melhor F1 macro registrado = 0.7684 com logistic_regression.
+- b2w_mais_olist: melhor F1 macro registrado = 0.7349 com logistic_regression.
+- b2w_mais_olist_mais_meli_simples: melhor F1 macro registrado = 0.7373 com logistic_regression.
 
 ## Limitacoes
 
 O estudo possui limitacoes importantes: ruido textual, erros ortograficos, abreviacoes, ambiguidades semanticas, desbalanceamento entre classes e a propria limitacao de usar a nota numerica como aproximacao de sentimento textual.
 
+O analisador simbolico atual tambem possui limitacoes: as regras sao conservadoras, dependem de padroes lexicais explicitos e nao usam analise sintatica profunda. Portanto, ele deve ser interpretado como baseline explicavel e comparativo, nao como substituto direto dos modelos supervisionados.
+
 ## Conclusao
 
-O projeto fornece uma linha de base simples e reproduzivel para classificacao de sentimentos em reviews de e-commerce brasileiro. A estrutura foi mantida propositalmente enxuta para facilitar apresentacao academica e execucao.
+O projeto fornece uma linha de base simples e reproduzivel para classificacao de sentimentos em reviews de e-commerce brasileiro. A versao atual combina modelos supervisionados com um analisador simbolico paralelo, permitindo comparar desempenho estatistico e interpretabilidade linguistica.
 
 ## Referencias
 
