@@ -6,10 +6,11 @@ Trabalho universitario de Processamento de Linguagem Natural voltado para classi
 
 Comparar abordagens de classificacao de sentimentos em reviews de produtos, usando textos em portugues e combinando diferentes fontes de dados para observar o impacto no desempenho.
 
-O projeto agora contempla duas frentes:
+O projeto agora contempla tres frentes:
 
 - modelos supervisionados classicos com TF-IDF, Regressao Logistica e Linear SVC;
-- analisador simbolico baseado em regras lexicais e discursivas, avaliado como baseline paralelo.
+- analisador simbolico baseado em regras lexicais e discursivas, avaliado como baseline paralelo;
+- recomendacao baseline de itens usando sentimento positivo, usuario, produto e categoria quando esses metadados existem.
 
 ## Bases utilizadas
 
@@ -23,6 +24,8 @@ O projeto agora contempla duas frentes:
 - `data_processing.py`: caminhos, download, limpeza textual, rotulagem por nota e carregamento das bases.
 - `sentiment_analyzer.py`: modelos supervisionados, analisador simbolico e execucao dos experimentos.
 - `report_generator.py`: matrizes de confusao, tabelas Markdown, resumo das bases e relatorio final.
+- `test_symbolic_analyzer.py`: teste rapido do analisador simbolico com `assert` nativo do Python.
+- `docs/como_executar.md`: guia de execucao do zero, incluindo ambiente virtual e pasta `data/`.
 - `docs/relatorio_final.md`: relatorio consolidado da ultima execucao registrada.
 - `docs/regras_simbolicas_viabilidade.md`: analise de viabilidade das regras simbolicas.
 - `docs/codigo_comentado.md`: explicacao da organizacao atual do codigo.
@@ -31,16 +34,18 @@ O projeto agora contempla duas frentes:
 
 ## Como executar
 
+Veja o passo a passo completo em [`docs/como_executar.md`](docs/como_executar.md).
+
+Execucao rapida, depois de preparar ambiente e dados:
+
 ```powershell
-pip install -r requirements.txt
+python test_symbolic_analyzer.py
 python main.py
 ```
 
-A execucao treina os modelos supervisionados, avalia o analisador simbolico em paralelo, salva `metricas.csv`, gera matrizes de confusao e atualiza `docs/relatorio_final.md`.
-
 ## Observacao sobre dados e arquivos locais
 
-Os datasets brutos, metricas geradas, scripts auxiliares de coleta local e arquivos da pasta `data/` nao fazem parte da arvore principal publicada no GitHub. Quando os CSVs locais nao existem, o pipeline tenta baixar B2W e Olist a partir das URLs configuradas. A base simples do Mercado Livre depende do arquivo local.
+Os datasets brutos, metricas geradas, recomendacoes geradas, scripts auxiliares de coleta local e arquivos da pasta `data/` nao fazem parte da arvore principal publicada no GitHub. Quando os CSVs locais nao existem, o pipeline tenta baixar B2W e Olist a partir das URLs configuradas. A base simples do Mercado Livre depende do arquivo local.
 
 ## Resultado esperado
 
@@ -50,4 +55,4 @@ A execucao do pipeline gera metricas comparando:
 - `linear_svc`;
 - `symbolic_rules`.
 
-As metricas sao gravadas em `metricas.csv` e descritas no relatorio final.
+As metricas sao gravadas em `metricas.csv`, as recomendacoes em `recomendacoes.csv` e ambos sao descritos no relatorio final.
