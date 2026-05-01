@@ -16,7 +16,7 @@ from data_processing import (
     load_olist,
 )
 from report_generator import summarize_dataset, write_report
-from sentiment_analyzer import run_experiment, run_symbolic_experiment
+from sentiment_analyzer import generate_recommendations, run_experiment, run_symbolic_experiment
 
 
 def main() -> None:
@@ -61,10 +61,23 @@ def main() -> None:
 
     metrics_df = pd.DataFrame(metric_rows)
     metrics_df.to_csv(ROOT / "metricas.csv", index=False)
-    write_report(availability, dataset_summaries, metrics_df)
+
+    recommendation_frames = [generate_recommendations(b2w_df)]
+    if meli_df is not None and not meli_df.empty:
+        recommendation_frames.append(generate_recommendations(meli_df))
+    recommendations_df = pd.concat(
+        [frame for frame in recommendation_frames if not frame.empty],
+        ignore_index=True,
+    ) if any(not frame.empty for frame in recommendation_frames) else pd.DataFrame()
+    recommendations_df.to_csv(ROOT / "recomendacoes.csv", index=False)
+
+    write_report(availability, dataset_summaries, metrics_df, recommendations_df)
 
     print("Execucao concluida.")
     print(metrics_df.to_string(index=False))
+    if not recommendations_df.empty:
+        print("\nRecomendacoes geradas:")
+        print(recommendations_df.head(10).to_string(index=False))
 
 
 if __name__ == "__main__":

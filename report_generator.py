@@ -52,6 +52,7 @@ def write_report(
     availability: dict[str, str],
     dataset_summaries: list[dict[str, object]],
     metrics_df: pd.DataFrame,
+    recommendations_df: pd.DataFrame | None = None,
 ) -> None:
     best_rows = (
         metrics_df.sort_values(["experimento", "f1_macro", "accuracy"], ascending=[True, False, False])
@@ -59,6 +60,23 @@ def write_report(
         .first()
     )
     dataset_df = pd.DataFrame(dataset_summaries)
+    recommendations_df = pd.DataFrame() if recommendations_df is None else recommendations_df
+    if recommendations_df.empty:
+        recommendation_text = "Nenhuma recomendacao foi gerada nesta execucao."
+    else:
+        recommendation_sample = recommendations_df.head(10)[
+            [
+                "tipo",
+                "user_id",
+                "rank",
+                "source",
+                "product_name",
+                "category",
+                "recommendation_score",
+                "motivo",
+            ]
+        ].copy()
+        recommendation_text = metrics_markdown_table(recommendation_sample)
     result_lines = []
     for _, row in best_rows.iterrows():
         result_lines.append(
@@ -94,7 +112,15 @@ Resumo dos conjuntos usados:
 
 ## Metodologia
 
-O pipeline seguiu as etapas de carregamento dos dados, uniao dos campos textuais, limpeza simples do texto, rotulagem por nota (1-2 negativo, 3 neutro, 4-5 positivo), vetorizacao com TF-IDF, treinamento de Regressao Logistica e Linear SVC e avaliacao com accuracy, precision, recall, F1-score macro e matriz de confusao. Alem dos modelos supervisionados, foi avaliado um analisador simbolico paralelo baseado em regras lexicais e discursivas simples. Foram considerados o experimento principal com B2W e experimentos combinados com Olist e Mercado Livre simples.
+O pipeline seguiu as etapas de carregamento dos dados, uniao dos campos textuais, limpeza do texto, remocao de stopwords, radicalizacao simples por sufixos, rotulagem por nota (1-2 negativo, 3 neutro, 4-5 positivo), vetorizacao com TF-IDF, treinamento de Regressao Logistica e Linear SVC e avaliacao com accuracy, precision, recall, F1-score macro e matriz de confusao. Alem dos modelos supervisionados, foi avaliado um analisador simbolico paralelo baseado em lexico de sentimento e regras discursivas simples. Foram considerados o experimento principal com B2W e experimentos combinados com Olist e Mercado Livre simples.
+
+## Recomendacao de itens
+
+Para atender ao uso academico de recomendacao, foi implementado um baseline explicavel baseado nas informacoes de sentimento. O campo `sentiment_label` representa a aproximacao de sentimento derivada da nota da avaliacao, usando a mesma regra das classes supervisionadas. Na B2W, o historico positivo de cada usuario define categorias de interesse, e o sistema recomenda produtos bem avaliados da mesma categoria, excluindo itens ja avaliados pelo usuario. Quando nao ha usuario disponivel, como na coleta simples do Mercado Livre, o sistema gera um ranking global de produtos por categoria usando media de nota, proporcao de avaliacoes positivas, sentimento medio e volume de reviews.
+
+Exemplo de recomendacoes geradas:
+
+{recommendation_text}
 
 ## Resultados
 
@@ -104,11 +130,11 @@ O pipeline seguiu as etapas de carregamento dos dados, uniao dos campos textuais
 
 ## Limitacoes
 
-O estudo possui limitacoes importantes: ruido textual, erros ortograficos, abreviacoes, ambiguidades semanticas, desbalanceamento entre classes e a propria limitacao de usar a nota numerica como aproximacao de sentimento textual.
+O estudo possui limitacoes importantes: ruido textual, erros ortograficos, abreviacoes, ambiguidades semanticas, desbalanceamento entre classes e a propria limitacao de usar a nota numerica como aproximacao de sentimento textual. A recomendacao ainda e um baseline simples: Olist nao entra na recomendacao personalizada por falta de metadados de produto e usuario nesta versao, e Mercado Livre entra como recomendacao global porque a coleta local nao possui identificador de usuario.
 
 ## Conclusao
 
-O projeto fornece uma linha de base simples e reproduzivel para classificacao de sentimentos em reviews de e-commerce brasileiro. A estrutura foi mantida propositalmente enxuta para facilitar apresentacao academica e execucao.
+O projeto fornece uma linha de base simples e reproduzivel para classificacao de sentimentos em reviews de e-commerce brasileiro e para recomendacao inicial de itens baseada nesses sentimentos. A estrutura foi mantida propositalmente enxuta para facilitar apresentacao academica e execucao.
 
 ## Referencias
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from math import log1p
 
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -20,6 +21,7 @@ from report_generator import save_confusion_matrix
 
 
 LABEL_ORDER = ["negativo", "neutro", "positivo"]
+LABEL_SCORE = {"negativo": -1.0, "neutro": 0.0, "positivo": 1.0}
 SYMBOLIC_SCORE_MARGIN = 0.75
 
 SYMBOLIC_POSITIVE_LEXICON = {
@@ -398,3 +400,126 @@ def run_symbolic_experiment(name: str, df: pd.DataFrame) -> list[dict[str, objec
             "matriz_confusao": image_name,
         }
     ]
+
+
+def build_product_recommendation_profile(df: pd.DataFrame, min_reviews: int = 2) -> pd.DataFrame:
+    required = {"product_id", "product_name", "category", "rating", "sentiment_label"}
+    if df.empty or not required.issubset(df.columns):
+        return pd.DataFrame()
+
+    candidates = df.copy()
+    candidates = candidates[candidates["product_id"].fillna("").astype(str).str.strip() != ""].copy()
+    if candidates.empty:
+        return pd.DataFrame()
+
+    candidates["sentiment_score"] = candidates["sentiment_label"].map(LABEL_SCORE).fillna(0.0)
+    grouped = (
+        candidates.groupby(["source", "product_id", "product_name", "category"], dropna=False)
+        .agg(
+            reviews=("sentiment_label", "size"),
+            rating_mean=("rating", "mean"),
+            sentiment_mean=("sentiment_score", "mean"),
+            positive_reviews=("sentiment_label", lambda values: int((values == "positivo").sum())),
+            negative_reviews=("sentiment_label", lambda values: int((values == "negativo").sum())),
+        )
+        .reset_index()
+    )
+    grouped = grouped[grouped["reviews"] >= min_reviews].copy()
+    if grouped.empty:
+        return grouped
+
+    grouped["positive_rate"] = grouped["positive_reviews"] / grouped["reviews"]
+    grouped["negative_rate"] = grouped["negative_reviews"] / grouped["reviews"]
+    max_volume = max(float(grouped["reviews"].max()), 1.0)
+    grouped["volume_score"] = grouped["reviews"].apply(lambda value: log1p(float(value)) / log1p(max_volume))
+    grouped["recommendation_score"] = (
+        grouped["positive_rate"] * 0.45
+        + (grouped["rating_mean"].fillna(0) / 5.0) * 0.35
+        + ((grouped["sentiment_mean"] + 1.0) / 2.0) * 0.15
+        + grouped["volume_score"] * 0.05
+        - grouped["negative_rate"] * 0.25
+    )
+    return grouped.sort_values(
+        ["recommendation_score", "positive_rate", "rating_mean", "reviews"],
+        ascending=[False, False, False, False],
+    )
+
+
+def generate_recommendations(
+    df: pd.DataFrame,
+    users_limit: int = 20,
+    recommendations_per_user: int = 5,
+    min_reviews: int = 2,
+) -> pd.DataFrame:
+    profile = build_product_recommendation_profile(df, min_reviews=min_reviews)
+    if profile.empty:
+        return pd.DataFrame()
+
+    rows: list[dict[str, object]] = []
+    user_ready = {"user_id", "product_id", "category", "sentiment_label"}.issubset(df.columns)
+    if user_ready:
+        user_df = df.copy()
+        user_df = user_df[user_df["user_id"].fillna("").astype(str).str.strip() != ""].copy()
+        positive_history = user_df[user_df["sentiment_label"] == "positivo"].copy()
+        user_ids = positive_history["user_id"].drop_duplicates().head(users_limit).tolist()
+
+        for user_id in user_ids:
+            user_reviews = user_df[user_df["user_id"] == user_id]
+            seen_products = set(user_reviews["product_id"].fillna("").astype(str))
+            liked_categories = (
+                positive_history[positive_history["user_id"] == user_id]["category"]
+                .fillna("")
+                .astype(str)
+                .str.strip()
+            )
+            liked_categories = [category for category in liked_categories.drop_duplicates().tolist() if category]
+            if not liked_categories:
+                continue
+
+            candidates = profile[
+                profile["category"].fillna("").astype(str).isin(liked_categories)
+                & ~profile["product_id"].fillna("").astype(str).isin(seen_products)
+            ].head(recommendations_per_user)
+
+            for rank, (_, candidate) in enumerate(candidates.iterrows(), start=1):
+                rows.append(
+                    {
+                        "tipo": "personalizada",
+                        "user_id": user_id,
+                        "categoria_base": candidate["category"],
+                        "rank": rank,
+                        "source": candidate["source"],
+                        "product_id": candidate["product_id"],
+                        "product_name": candidate["product_name"],
+                        "category": candidate["category"],
+                        "recommendation_score": round(float(candidate["recommendation_score"]), 4),
+                        "rating_mean": round(float(candidate["rating_mean"]), 4),
+                        "positive_rate": round(float(candidate["positive_rate"]), 4),
+                        "reviews": int(candidate["reviews"]),
+                        "motivo": "categoria com historico positivo do usuario",
+                    }
+                )
+
+    if rows:
+        return pd.DataFrame(rows)
+
+    fallback = profile.head(recommendations_per_user)
+    for rank, (_, candidate) in enumerate(fallback.iterrows(), start=1):
+        rows.append(
+            {
+                "tipo": "global",
+                "user_id": "",
+                "categoria_base": candidate["category"],
+                "rank": rank,
+                "source": candidate["source"],
+                "product_id": candidate["product_id"],
+                "product_name": candidate["product_name"],
+                "category": candidate["category"],
+                "recommendation_score": round(float(candidate["recommendation_score"]), 4),
+                "rating_mean": round(float(candidate["rating_mean"]), 4),
+                "positive_rate": round(float(candidate["positive_rate"]), 4),
+                "reviews": int(candidate["reviews"]),
+                "motivo": "ranking global por sentimento positivo",
+            }
+        )
+    return pd.DataFrame(rows)
