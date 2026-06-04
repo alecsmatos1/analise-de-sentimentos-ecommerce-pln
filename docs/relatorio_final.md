@@ -56,23 +56,23 @@ personalizada | 014d6dc5a10aed1ff1e6f349fb2b059a2d3de511c7538a9008da562ead5f5ecd
 
 experimento | modelo | linhas | accuracy | precision_macro | recall_macro | f1_macro | matriz_confusao
 --- | --- | --- | --- | --- | --- | --- | ---
-b2w_principal | logistic_regression | 132220 | 0.8117 | 0.7307 | 0.7735 | 0.7423 | cm_b2w_principal_logistic_regression.png
-b2w_principal | linear_svc | 132220 | 0.8394 | 0.7339 | 0.7363 | 0.7347 | cm_b2w_principal_linear_svc.png
-b2w_principal | symbolic_rules | 132220 | 0.7432 | 0.6366 | 0.5859 | 0.6018 | cm_b2w_principal_symbolic_rules.png
-b2w_mais_olist | logistic_regression | 175423 | 0.8086 | 0.7125 | 0.7517 | 0.7234 | cm_b2w_mais_olist_logistic_regression.png
-b2w_mais_olist | linear_svc | 175423 | 0.838 | 0.7151 | 0.7154 | 0.7145 | cm_b2w_mais_olist_linear_svc.png
-b2w_mais_olist | symbolic_rules | 175423 | 0.7079 | 0.6251 | 0.5689 | 0.5803 | cm_b2w_mais_olist_symbolic_rules.png
-b2w_mais_meli_simples | logistic_regression | 133602 | 0.814 | 0.733 | 0.7775 | 0.7452 | cm_b2w_mais_meli_simples_logistic_regression.png
-b2w_mais_meli_simples | linear_svc | 133602 | 0.8418 | 0.7377 | 0.7398 | 0.7385 | cm_b2w_mais_meli_simples_linear_svc.png
-b2w_mais_meli_simples | symbolic_rules | 133602 | 0.7457 | 0.6386 | 0.5879 | 0.6036 | cm_b2w_mais_meli_simples_symbolic_rules.png
-b2w_mais_olist_mais_meli_simples | logistic_regression | 176805 | 0.8103 | 0.7134 | 0.7525 | 0.7242 | cm_b2w_mais_olist_mais_meli_simples_logistic_regression.png
-b2w_mais_olist_mais_meli_simples | linear_svc | 176805 | 0.8385 | 0.7148 | 0.715 | 0.7141 | cm_b2w_mais_olist_mais_meli_simples_linear_svc.png
-b2w_mais_olist_mais_meli_simples | symbolic_rules | 176805 | 0.7108 | 0.6248 | 0.5701 | 0.5814 | cm_b2w_mais_olist_mais_meli_simples_symbolic_rules.png
+b2w_principal | logistic_regression | 132220 | 0.8104 | 0.7304 | 0.7734 | 0.7416 | cm_b2w_principal_logistic_regression.png
+b2w_principal | linear_svc | 132220 | 0.8389 | 0.7329 | 0.7347 | 0.7334 | cm_b2w_principal_linear_svc.png
+b2w_principal | symbolic_rules | 132220 | 0.7534 | 0.6251 | 0.5772 | 0.5934 | cm_b2w_principal_symbolic_rules.png
+b2w_mais_olist | logistic_regression | 175423 | 0.807 | 0.7114 | 0.7507 | 0.7219 | cm_b2w_mais_olist_logistic_regression.png
+b2w_mais_olist | linear_svc | 175423 | 0.8366 | 0.7129 | 0.7137 | 0.7125 | cm_b2w_mais_olist_linear_svc.png
+b2w_mais_olist | symbolic_rules | 175423 | 0.7157 | 0.6033 | 0.5538 | 0.5687 | cm_b2w_mais_olist_symbolic_rules.png
+b2w_mais_meli_simples | logistic_regression | 133602 | 0.8101 | 0.7298 | 0.7745 | 0.7414 | cm_b2w_mais_meli_simples_logistic_regression.png
+b2w_mais_meli_simples | linear_svc | 133602 | 0.8398 | 0.7335 | 0.735 | 0.7337 | cm_b2w_mais_meli_simples_linear_svc.png
+b2w_mais_meli_simples | symbolic_rules | 133602 | 0.754 | 0.6257 | 0.5767 | 0.5932 | cm_b2w_mais_meli_simples_symbolic_rules.png
+b2w_mais_olist_mais_meli_simples | logistic_regression | 176805 | 0.8085 | 0.7125 | 0.7523 | 0.7231 | cm_b2w_mais_olist_mais_meli_simples_logistic_regression.png
+b2w_mais_olist_mais_meli_simples | linear_svc | 176805 | 0.8376 | 0.7135 | 0.715 | 0.7136 | cm_b2w_mais_olist_mais_meli_simples_linear_svc.png
+b2w_mais_olist_mais_meli_simples | symbolic_rules | 176805 | 0.719 | 0.6055 | 0.5567 | 0.5714 | cm_b2w_mais_olist_mais_meli_simples_symbolic_rules.png
 
-- b2w_mais_meli_simples: melhor F1 macro = 0.7452 com logistic_regression.
-- b2w_mais_olist: melhor F1 macro = 0.7234 com logistic_regression.
-- b2w_mais_olist_mais_meli_simples: melhor F1 macro = 0.7242 com logistic_regression.
-- b2w_principal: melhor F1 macro = 0.7423 com logistic_regression.
+- b2w_mais_meli_simples: melhor F1 macro = 0.7414 com logistic_regression.
+- b2w_mais_olist: melhor F1 macro = 0.7219 com logistic_regression.
+- b2w_mais_olist_mais_meli_simples: melhor F1 macro = 0.7231 com logistic_regression.
+- b2w_principal: melhor F1 macro = 0.7416 com logistic_regression.
 
 ## Limitacoes
 
