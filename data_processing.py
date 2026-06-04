@@ -6,6 +6,12 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlretrieve
 
+import nltk
+nltk.download("rslp", quiet=True)
+from nltk.stem import RSLPStemmer
+
+_stemmer = RSLPStemmer()
+
 import pandas as pd
 
 
@@ -37,6 +43,10 @@ OUTPUT_COLUMNS = [
     "category",
 ]
 
+# Lista curada manualmente. NÃO usa lista genérica do NLTK porque listas pré-compiladas
+# genéricas removem negadores ("não", "sem") e outros marcadores com carga semântica
+# relevante para análise de sentimentos. Referência: Saif et al. (2014), LREC,
+# "On Stopwords, Filtering and Data Sparsity for Sentiment Analysis of Twitter".
 PORTUGUESE_STOPWORDS = {
     "a",
     "ao",
@@ -108,39 +118,6 @@ PORTUGUESE_STOPWORDS = {
     "voce",
 }
 
-STEM_SUFFIXES = (
-    "amentos",
-    "imentos",
-    "amento",
-    "imento",
-    "adoras",
-    "adores",
-    "acao",
-    "acoes",
-    "mente",
-    "idades",
-    "idade",
-    "ivos",
-    "ivas",
-    "oso",
-    "osa",
-    "osos",
-    "osas",
-    "ado",
-    "ada",
-    "ados",
-    "adas",
-    "ido",
-    "ida",
-    "idos",
-    "idas",
-    "ar",
-    "er",
-    "ir",
-    "s",
-)
-
-
 def ensure_directories() -> None:
     DATA_DIR.mkdir(exist_ok=True)
     DOCS_DIR.mkdir(exist_ok=True)
@@ -157,15 +134,17 @@ def download_if_needed(url: str, path: Path) -> tuple[bool, str]:
 
 
 def simple_stem(token: str) -> str:
-    if len(token) <= 4:
-        return token
-    for suffix in STEM_SUFFIXES:
-        if token.endswith(suffix) and len(token) - len(suffix) >= 4:
-            return token[: -len(suffix)]
-    return token
+    return _stemmer.stem(token)
 
 
 def clean_text(text: str) -> str:
+    """
+    Pré-processamento para os modelos supervisionados (TF-IDF).
+
+    Usa lista de stopwords curada manualmente — ver comentário em PORTUGUESE_STOPWORDS.
+    O critério dinâmico de Saif et al. (2014) de remover termos infrequentes é implementado
+    pelo parâmetro min_df=3 do TF-IDF em build_pipeline(), de forma conservadora.
+    """
     text = "" if text is None else str(text).strip().lower()
     text = unicodedata.normalize("NFKD", text)
     text = "".join(char for char in text if not unicodedata.combining(char))

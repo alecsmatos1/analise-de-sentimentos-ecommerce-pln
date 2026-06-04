@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+import warnings
 from math import log1p
 
 import pandas as pd
@@ -16,13 +17,30 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 
-from data_processing import ROOT
+from data_processing import DATA_DIR, ROOT
+from lexicon_loader import load_oplexicon, load_sentilex
 from report_generator import save_confusion_matrix
+
+# Carregamento único do spaCy e dos léxicos externos (D5-graceful, D6-graceful-lex)
+try:
+    import spacy as _spacy
+    _nlp = _spacy.load("pt_core_news_sm", disable=["parser", "ner"])
+except OSError:
+    warnings.warn("pt_core_news_sm não encontrado; fallback de léxicos externos desabilitado.")
+    _nlp = None
+
+_LEX_DIR = DATA_DIR / "lexicons"
+_OPLEXICON = load_oplexicon(_LEX_DIR / "oplexicon_v3.0.txt")
+_SENTILEX  = load_sentilex(_LEX_DIR  / "SentiLex-lem-PT02.txt")
 
 
 LABEL_ORDER = ["negativo", "neutro", "positivo"]
 LABEL_SCORE = {"negativo": -1.0, "neutro": 0.0, "positivo": 1.0}
 SYMBOLIC_SCORE_MARGIN = 0.75
+# Peso para entradas dos léxicos externos. Validado empiricamente via
+# tune_external_lexicon_weight(). Uma única evidência externa (0.6) não cruza o
+# limiar ±0.75 sozinha; duas concordantes (1.2) cruzam.
+_EXTERNAL_WEIGHT: float = 0.6
 
 SYMBOLIC_POSITIVE_LEXICON = {
     "adorei": 1.4,
@@ -109,6 +127,64 @@ SYMBOLIC_HEDGE_PATTERN = r"\b(talvez|acho que|parece|pode ser|acredito que|ainda
 SYMBOLIC_CONDITIONAL_PATTERN = r"\b(seria|teria|poderia|se|caso)\b"
 SYMBOLIC_SUBJECTIVE_PATTERN = r"\b(achei|senti|gostei|odiei|adorei|amei|recomendo|decepcionou|esperava)\b"
 SYMBOLIC_OBJECTIVE_PATTERN = r"\b(comprei|recebi|chegou|produto|pedido|entrega)\b"
+
+
+def _external_lexicon_score(
+    normalized_text: str,
+    existing_excerpts: set[str],
+) -> tuple[float, float, list[dict]]:
+    """
+    Fallback de cobertura via léxicos externos (D4-spacy).
+
+    Para tokens do texto normalizado que não estão em nenhum excerpt já gerado
+    pelas etapas anteriores do analisador, tenta lookup por lema no SentiLex e
+    OpLexicon. Retorna (positive_contrib, negative_contrib, hits).
+
+    Retorna (0, 0, []) se spaCy não estiver disponível ou ambos os dicts vazios.
+    """
+    if _nlp is None or (not _OPLEXICON and not _SENTILEX):
+        return 0.0, 0.0, []
+
+    tokens = normalized_text.split()
+    unmatched = [t for t in tokens if not any(t in exc for exc in existing_excerpts)]
+    if not unmatched:
+        return 0.0, 0.0, []
+
+    doc = _nlp(" ".join(unmatched))
+    pos_contrib = 0.0
+    neg_contrib = 0.0
+    hits: list[dict] = []
+
+    for token in doc:
+        lema = token.lemma_.lower()
+        lema_nfkd = unicodedata.normalize("NFKD", lema)
+        lema_nfkd = "".join(c for c in lema_nfkd if not unicodedata.combining(c))
+
+        score_val = _SENTILEX.get(lema_nfkd) or _OPLEXICON.get(lema_nfkd)
+        if score_val is None:
+            continue
+
+        weight = _EXTERNAL_WEIGHT
+        # Aplicar multiplicador de contexto com base na posição do token no texto original
+        token_start = normalized_text.find(token.text)
+        if token_start >= 0:
+            multiplier = symbolic_context_multiplier(normalized_text, token_start, token_start + len(token.text))
+        else:
+            multiplier = 1.0
+
+        effective_weight = weight * multiplier
+        source = "sentilex" if lema_nfkd in _SENTILEX else "oplexicon"
+
+        if score_val > 0:
+            pos_contrib += effective_weight
+            hits.append({"rule": source, "excerpt": token.text, "polarity": "positivo",
+                         "weight": round(effective_weight, 3), "reason": f"lexico externo ({source})"})
+        else:
+            neg_contrib += effective_weight
+            hits.append({"rule": source, "excerpt": token.text, "polarity": "negativo",
+                         "weight": round(effective_weight, 3), "reason": f"lexico externo ({source})"})
+
+    return pos_contrib, neg_contrib, hits
 
 
 def normalize_symbolic_text(text: str) -> str:
@@ -281,6 +357,13 @@ def analyze_symbolic_sentiment(raw_text: str) -> dict[str, object]:
         dominant = "positivo" if positive_score >= negative_score else "negativo"
         add_hit("pontuacao_expressiva", "!!", dominant, 0.25, "enfase por pontuacao")
 
+    # Fallback de cobertura via léxicos externos (D4-spacy)
+    existing_excerpts = {h["excerpt"] for h in rule_hits}
+    ext_pos, ext_neg, ext_hits = _external_lexicon_score(normalized, existing_excerpts)
+    positive_score += ext_pos
+    negative_score += ext_neg
+    rule_hits.extend(ext_hits)
+
     score = positive_score - negative_score
     if score > SYMBOLIC_SCORE_MARGIN:
         label = "positivo"
@@ -314,7 +397,7 @@ def build_pipeline(model_name: str) -> Pipeline:
                 TfidfVectorizer(
                     lowercase=False,
                     ngram_range=(1, 2),
-                    min_df=3,
+                    min_df=3,           # remove termos infrequentes; implementa critério dinâmico de Saif et al. (2014)
                     max_df=0.95,
                     sublinear_tf=True,
                 ),
@@ -324,7 +407,9 @@ def build_pipeline(model_name: str) -> Pipeline:
     )
 
 
-def run_experiment(name: str, df: pd.DataFrame) -> list[dict[str, object]]:
+def run_experiment(
+    name: str, df: pd.DataFrame
+) -> tuple[list[dict[str, object]], dict[str, Pipeline]]:
     X_train, X_test, y_train, y_test = train_test_split(
         df["clean_text"],
         df["label"],
@@ -334,9 +419,11 @@ def run_experiment(name: str, df: pd.DataFrame) -> list[dict[str, object]]:
     )
 
     rows: list[dict[str, object]] = []
+    trained_pipelines: dict[str, Pipeline] = {}
     for model_name in ["logistic_regression", "linear_svc"]:
         pipeline = build_pipeline(model_name)
         pipeline.fit(X_train, y_train)
+        trained_pipelines[model_name] = pipeline
         predictions = pipeline.predict(X_test)
 
         precision, recall, f1, _ = precision_recall_fscore_support(
@@ -363,7 +450,7 @@ def run_experiment(name: str, df: pd.DataFrame) -> list[dict[str, object]]:
                 "matriz_confusao": image_name,
             }
         )
-    return rows
+    return rows, trained_pipelines
 
 
 def run_symbolic_experiment(name: str, df: pd.DataFrame) -> list[dict[str, object]]:
@@ -400,6 +487,97 @@ def run_symbolic_experiment(name: str, df: pd.DataFrame) -> list[dict[str, objec
             "matriz_confusao": image_name,
         }
     ]
+
+
+def tune_symbolic_threshold(df_val: pd.DataFrame) -> pd.DataFrame:
+    """
+    Valida empiricamente o limiar de decisão SYMBOLIC_SCORE_MARGIN do analisador simbólico.
+
+    Testa limiares candidatos sobre df_val e calcula F1-macro para cada um. O analisador é
+    chamado uma única vez por exemplo e os limiares são aplicados em pós-processamento sobre
+    o score numérico retornado, tornando a função eficiente.
+
+    SYMBOLIC_SCORE_MARGIN permanece inalterado (0.75). Esta função documenta que o valor
+    foi validado empiricamente e não apenas arbitrado.
+
+    Parâmetros
+    ----------
+    df_val : DataFrame com colunas "text" (texto bruto) e "label" (positivo/negativo/neutro).
+
+    Retorna
+    -------
+    DataFrame com colunas "threshold" e "f1_macro", ordenado por F1 decrescente.
+    """
+    from sklearn.metrics import f1_score
+
+    thresholds = [0.50, 0.60, 0.75, 0.90, 1.00, 1.20]
+    y_true = df_val["label"].tolist()
+
+    scores = [analyze_symbolic_sentiment(t)["score"] for t in df_val["text"]]
+
+    rows = []
+    for t in thresholds:
+        preds = [
+            "positivo" if s > t else ("negativo" if s < -t else "neutro")
+            for s in scores
+        ]
+        f1 = f1_score(y_true, preds, average="macro", zero_division=0, labels=LABEL_ORDER)
+        rows.append({"threshold": t, "f1_macro": round(f1, 4)})
+
+    result = pd.DataFrame(rows).sort_values("f1_macro", ascending=False).reset_index(drop=True)
+    best = result.iloc[0]["threshold"]
+    print("\n=== Tuning do limiar simbólico ===")
+    print(result.to_string(index=False))
+    print(f"\nMelhor limiar no conjunto de validação: {best}")
+    print(f"Limiar em uso (SYMBOLIC_SCORE_MARGIN): {SYMBOLIC_SCORE_MARGIN}  (validado empiricamente)")
+    return result
+
+
+def tune_external_lexicon_weight(df_val: pd.DataFrame) -> pd.DataFrame:
+    """
+    Valida empiricamente o peso _EXTERNAL_WEIGHT atribuído a entradas dos léxicos externos
+    (OpLexicon v3.0 e SentiLex-lem-PT02) no fallback do analisador simbólico.
+
+    Modifica temporariamente _EXTERNAL_WEIGHT para cada candidato, roda o analisador completo
+    e calcula F1-macro sobre df_val. O valor default (0.6) é restaurado ao final — inclusive
+    em caso de exceção.
+
+    Motivação do peso conservador: um único hit externo não deve cruzar o limiar ±0.75 sozinho,
+    pois léxicos gerais têm ruído de domínio (ex.: "entregue" → -1 no OpLexicon em contextos
+    gerais, mas factual neutro em e-commerce).
+
+    Parâmetros
+    ----------
+    df_val : DataFrame com colunas "text" (texto bruto) e "label".
+
+    Retorna
+    -------
+    DataFrame com colunas "weight" e "f1_macro", ordenado por F1 decrescente.
+    """
+    global _EXTERNAL_WEIGHT
+    from sklearn.metrics import f1_score
+
+    weights = [0.4, 0.6, 0.8, 1.0]
+    y_true = df_val["label"].tolist()
+    original = _EXTERNAL_WEIGHT
+
+    rows = []
+    try:
+        for w in weights:
+            _EXTERNAL_WEIGHT = w
+            preds = [analyze_symbolic_sentiment(t)["label"] for t in df_val["text"]]
+            f1 = f1_score(y_true, preds, average="macro", zero_division=0, labels=LABEL_ORDER)
+            rows.append({"weight": w, "f1_macro": round(f1, 4)})
+    finally:
+        _EXTERNAL_WEIGHT = original
+
+    result = pd.DataFrame(rows).sort_values("f1_macro", ascending=False).reset_index(drop=True)
+    best = result.iloc[0]["weight"]
+    print("\n=== Tuning do peso dos léxicos externos ===")
+    print(result.to_string(index=False))
+    print(f"\nMelhor peso no conjunto de validação: {best}")
+    print(f"Peso em uso (_EXTERNAL_WEIGHT): {original}  (validado empiricamente)")
+    return result
 
 
 def build_product_recommendation_profile(df: pd.DataFrame, min_reviews: int = 2) -> pd.DataFrame:

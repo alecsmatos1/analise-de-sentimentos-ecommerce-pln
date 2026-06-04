@@ -15,12 +15,21 @@ from data_processing import (
     load_meli_simple,
     load_olist,
 )
-from report_generator import summarize_dataset, write_report
-from sentiment_analyzer import generate_recommendations, run_experiment, run_symbolic_experiment
+from sklearn.model_selection import train_test_split
+
+from report_generator import evaluate_on_gold, evaluate_on_repro, summarize_dataset, write_report
+from sentiment_analyzer import (
+    generate_recommendations,
+    run_experiment,
+    run_symbolic_experiment,
+    tune_external_lexicon_weight,
+    tune_symbolic_threshold,
+)
 
 
 def main() -> None:
     ensure_directories()
+    (ROOT / "data" / "gold").mkdir(exist_ok=True)
 
     availability: dict[str, str] = {}
     ok_b2w, msg_b2w = download_if_needed(B2W_URL, B2W_PATH)
@@ -33,6 +42,18 @@ def main() -> None:
     availability["meli_simples"] = "arquivo local" if MELI_SIMPLE_PATH.exists() else "nao disponivel"
 
     b2w_df = load_b2w()
+
+    # Conjunto de validação (10% do B2W, estratificado) para documentar tuning dos
+    # hiperparâmetros do analisador simbólico. Não interfere no treino dos modelos
+    # supervisionados, que continuam usando b2w_df completo em run_experiment().
+    _, df_val_tune = train_test_split(
+        b2w_df,
+        test_size=0.1,
+        stratify=b2w_df["label"],
+        random_state=42,
+    )
+    df_val_tune = df_val_tune[["raw_text", "label"]].rename(columns={"raw_text": "text"})
+
     experiments = {"b2w_principal": b2w_df}
     olist_df = None
     meli_df = None
@@ -55,9 +76,13 @@ def main() -> None:
 
     dataset_summaries = [summarize_dataset(name, df) for name, df in experiments.items()]
     metric_rows: list[dict[str, object]] = []
+    b2w_principal_pipelines: dict = {}
     for name, df in experiments.items():
-        metric_rows.extend(run_experiment(name, df))
+        rows, trained_pipelines = run_experiment(name, df)
+        metric_rows.extend(rows)
         metric_rows.extend(run_symbolic_experiment(name, df))
+        if name == "b2w_principal":
+            b2w_principal_pipelines = trained_pipelines
 
     metrics_df = pd.DataFrame(metric_rows)
     metrics_df.to_csv(ROOT / "metricas.csv", index=False)
@@ -72,6 +97,18 @@ def main() -> None:
     recommendations_df.to_csv(ROOT / "recomendacoes.csv", index=False)
 
     write_report(availability, dataset_summaries, metrics_df, recommendations_df)
+
+    # Avaliação gold: modelo treinado em B2W avaliado no Olist (plataformas independentes)
+    if olist_df is not None and not olist_df.empty and b2w_principal_pipelines:
+        evaluate_on_gold(b2w_principal_pipelines, olist_df, train_experiment_name="b2w_principal")
+
+    # Documentar validação empírica dos hiperparâmetros do analisador simbólico
+    tune_symbolic_threshold(df_val_tune)
+    tune_external_lexicon_weight(df_val_tune)
+
+    # Avaliar no corpus gold RePro (pula silenciosamente se data/gold/repro.csv não existir)
+    if b2w_principal_pipelines:
+        evaluate_on_repro(b2w_principal_pipelines)
 
     print("Execucao concluida.")
     print(metrics_df.to_string(index=False))

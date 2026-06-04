@@ -2,3 +2,6 @@ pandas
 numpy
 scikit-learn
 matplotlib
+nltk
+spacy
+# após pip install spacy, rodar: python -m spacy download pt_core_news_sm

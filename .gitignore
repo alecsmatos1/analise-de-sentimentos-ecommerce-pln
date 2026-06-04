@@ -18,10 +18,14 @@ ENV/
 .ipynb_checkpoints/
 .coverage
 htmlcov/
+tmp/
+.claude/
 
 # Editors and OS files
 .vscode/
 .idea/
+.obsidian/
+docs/.obsidian/
 .DS_Store
 Thumbs.db
 
@@ -34,6 +38,10 @@ Thumbs.db
 # versionable because docs/relatorio_final.md references them by filename.
 metricas.csv
 recomendacoes.csv
+artifacts/*
+!artifacts/README.md
+docs/relatorio.latex
+latex/
 
 # Raw datasets
 data/B2W-Reviews01.csv
@@ -41,6 +49,11 @@ data/olist_order_reviews_dataset.csv
 data/raw/*.csv
 data/mercadolivre_reviews.csv
 data/mercadolivre_reviews_simple.csv
+
+# Etapa 2 — léxicos externos e corpus gold (baixados localmente, não versionados)
+data/lexicons/
+data/gold_corpus/
+data/gold/
 
 # Local data collection scripts
 collect_meli_reviews.py

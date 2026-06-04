@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import matplotlib
+import numpy as np
 import pandas as pd
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 
-from data_processing import DOCS_DIR
+from data_processing import DOCS_DIR, ROOT
 
 
 matplotlib.use("Agg")
@@ -145,3 +147,203 @@ REAL, L.; OSHIRO, M.; MAFRA, A. B2W-Reviews01: an open product reviews corpus. 2
 MERCADO LIVRE. Documentacao da API de opinioes sobre um produto. Disponivel em: <https://developers.mercadolivre.com.br/pt_br/opinioes-sobre-um-produto>. Acesso em: 19 abr. 2026.
 """
     (DOCS_DIR / "relatorio_final.md").write_text(report, encoding="utf-8")
+
+
+def evaluate_on_gold(
+    trained_pipelines: dict,
+    df_gold: pd.DataFrame,
+    train_experiment_name: str = "b2w_principal",
+) -> None:
+    """
+    Avalia modelos supervisionados e simbólico sobre um corpus gold externo.
+
+    Corpus gold: Olist (avaliação cruzada entre plataformas — modelo treinado em
+    B2W, avaliado em Olist, que é uma plataforma independente). Ver decisão D2-gold.
+
+    df_gold deve ter colunas: raw_text (simbólico), clean_text (supervisionados), label.
+    Salva tabela em artifacts/gold_evaluation.md.
+    """
+    from sentiment_analyzer import analyze_symbolic_sentiment, LABEL_ORDER
+
+    artifacts_dir = ROOT / "artifacts"
+    artifacts_dir.mkdir(exist_ok=True)
+
+    y_true = df_gold["label"].tolist()
+    rows = []
+
+    # Modelos supervisionados
+    for model_name, pipeline in trained_pipelines.items():
+        preds = pipeline.predict(df_gold["clean_text"]).tolist()
+        acc = accuracy_score(y_true, preds)
+        prec, rec, f1, _ = precision_recall_fscore_support(
+            y_true, preds, average="macro", zero_division=0, labels=LABEL_ORDER
+        )
+        rows.append({
+            "modelo": model_name,
+            "corpus_treino": train_experiment_name,
+            "corpus_gold": "olist",
+            "linhas_gold": len(df_gold),
+            "accuracy": round(float(acc), 4),
+            "precision_macro": round(float(prec), 4),
+            "recall_macro": round(float(rec), 4),
+            "f1_macro": round(float(f1), 4),
+        })
+
+    # Analisador simbólico
+    sym_preds = [analyze_symbolic_sentiment(t)["label"] for t in df_gold["raw_text"]]
+    acc = accuracy_score(y_true, sym_preds)
+    prec, rec, f1, _ = precision_recall_fscore_support(
+        y_true, sym_preds, average="macro", zero_division=0, labels=LABEL_ORDER
+    )
+    rows.append({
+        "modelo": "symbolic_rules",
+        "corpus_treino": "n/a",
+        "corpus_gold": "olist",
+        "linhas_gold": len(df_gold),
+        "accuracy": round(float(acc), 4),
+        "precision_macro": round(float(prec), 4),
+        "recall_macro": round(float(rec), 4),
+        "f1_macro": round(float(f1), 4),
+    })
+
+    df_results = pd.DataFrame(rows)
+    table = metrics_markdown_table(df_results)
+
+    report = f"""# Avaliacao Gold — Avaliacao Cruzada entre Plataformas
+
+## Configuracao
+
+- **Corpus gold:** Olist Brazilian E-Commerce Public Dataset (plataforma independente de B2W)
+- **Modelo supervisionado treinado em:** {train_experiment_name}
+- **Justificativa:** Os modelos supervisionados nunca viram dados Olist durante o treino.
+  Isso testa generalizacao entre plataformas de e-commerce brasileiras distintas.
+- **Limitacao:** Rotulos derivados de notas numericas (mesma metodologia do treino).
+  Substituir por corpus com anotacao humana quando disponivel (SentiBR estava inacessivel em 2026-06-04).
+
+## Resultados
+
+{table}
+
+## Interpretacao
+
+Comparar estes resultados com os resultados em-dominio (metricas.csv) revela o gap de
+generalizacao entre plataformas. Uma queda menor indica maior robustez do modelo.
+"""
+    (artifacts_dir / "gold_evaluation.md").write_text(report, encoding="utf-8")
+    print(f"\nAvaliacao gold salva em artifacts/gold_evaluation.md")
+    print(df_results.to_string(index=False))
+
+
+def evaluate_on_repro(
+    trained_pipelines: dict,
+    path: str = "data/gold/repro.csv",
+) -> None:
+    """
+    Avalia os três sistemas (LR, LinearSVC, simbólico) no corpus gold RePro.
+
+    RePro é usado APENAS para avaliação — nunca para treino. Os modelos supervisionados
+    recebem o texto pré-processado via clean_text(); o analisador simbólico recebe o texto bruto.
+
+    Referência: dos Santos Silva et al. (2024), PROPOR,
+    "RePro: a benchmark for Opinion Mining in Brazilian Portuguese".
+
+    Parâmetros
+    ----------
+    trained_pipelines : dict {"logistic_regression": Pipeline, "linear_svc": Pipeline}
+        Modelos treinados no experimento b2w_principal.
+    path : str
+        Caminho para o arquivo CSV do RePro (padrão: data/gold/repro.csv).
+        Se o arquivo não existir, a função imprime aviso e retorna sem erro.
+    """
+    from pathlib import Path as _Path
+    from sentiment_analyzer import analyze_symbolic_sentiment, LABEL_ORDER
+    from data_processing import clean_text
+
+    p = _Path(path)
+    if not p.exists():
+        print(f"\nRePro não encontrado em {path} — avaliação gold pulada.")
+        return
+
+    df = pd.read_csv(p)
+
+    # Formato real do RePro (inspecionado em 2026-06-04):
+    #   Texto: coluna "review_text" (review_title concatenado quando disponível)
+    #   Rótulo: coluna "polarity" com strings de listas, ex: "['POSITIVO']", "['NEGATIVO']",
+    #           "['NEUTRO']", "['NEGATIVO', 'POSITIVO']"
+    #
+    # Mapeamento de rótulos:
+    #   ['POSITIVO']            → positivo
+    #   ['NEGATIVO']            → negativo
+    #   ['NEUTRO']              → neutro
+    #   ['NEGATIVO','POSITIVO'] → neutro (sentimentos conflitantes = polaridade mista ≈ neutro)
+    #
+    # Distribuição no corpus (10.003 exemplos):
+    #   positivo: 4.127 | negativo: 3.449 | neutro: 409 | misto→neutro: 2.018
+
+    title = df["review_title"].fillna("").astype(str).str.strip()
+    body  = df["review_text"].fillna("").astype(str).str.strip()
+    df["_text"] = (title + " " + body).str.strip()
+
+    def _map_polarity(val: str) -> str:
+        val = str(val).upper()
+        has_pos = "POSITIVO" in val
+        has_neg = "NEGATIVO" in val
+        if has_pos and has_neg:
+            return "neutro"
+        if has_pos:
+            return "positivo"
+        if has_neg:
+            return "negativo"
+        return "neutro"
+
+    df["_label"] = df["polarity"].apply(_map_polarity)
+    df["_clean"] = df["_text"].apply(clean_text)
+
+    y_true = df["_label"].tolist()
+    rows = []
+
+    for model_name, pipeline in trained_pipelines.items():
+        preds = pipeline.predict(df["_clean"]).tolist()
+        acc = accuracy_score(y_true, preds)
+        prec, rec, f1, _ = precision_recall_fscore_support(
+            y_true, preds, average="macro", zero_division=0, labels=LABEL_ORDER
+        )
+        rows.append({
+            "modelo": model_name, "corpus_treino": "b2w_principal", "corpus_gold": "repro",
+            "linhas_gold": len(df),
+            "accuracy": round(float(acc), 4), "precision_macro": round(float(prec), 4),
+            "recall_macro": round(float(rec), 4), "f1_macro": round(float(f1), 4),
+        })
+
+    sym_preds = [analyze_symbolic_sentiment(t)["label"] for t in df["_text"]]
+    acc = accuracy_score(y_true, sym_preds)
+    prec, rec, f1, _ = precision_recall_fscore_support(
+        y_true, sym_preds, average="macro", zero_division=0, labels=LABEL_ORDER
+    )
+    rows.append({
+        "modelo": "symbolic_rules", "corpus_treino": "n/a", "corpus_gold": "repro",
+        "linhas_gold": len(df),
+        "accuracy": round(float(acc), 4), "precision_macro": round(float(prec), 4),
+        "recall_macro": round(float(rec), 4), "f1_macro": round(float(f1), 4),
+    })
+
+    df_res = pd.DataFrame(rows)
+    artifacts_dir = ROOT / "artifacts"
+    artifacts_dir.mkdir(exist_ok=True)
+
+    report = f"""# Avaliacao Gold — RePro
+
+## Configuracao
+
+- **Corpus gold:** RePro (dos Santos Silva et al., PROPOR 2024) — anotacao manual em PT-BR
+- **Modelos avaliados:** treinados em b2w_principal; jamais viram dados do RePro
+- **Uso:** somente avaliacao
+
+## Resultados
+
+{metrics_markdown_table(df_res)}
+"""
+    (artifacts_dir / "repro_evaluation.md").write_text(report, encoding="utf-8")
+    print("\n=== Avaliacao no corpus gold RePro ===")
+    print(df_res.to_string(index=False))
+    print("\nResultados salvos em artifacts/repro_evaluation.md")
