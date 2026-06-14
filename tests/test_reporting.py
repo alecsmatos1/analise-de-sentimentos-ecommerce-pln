@@ -129,3 +129,41 @@ def test_reporting_rejects_missing_metric_fields(tmp_path: Path):
 def test_default_output_dir_points_to_v2_outputs():
     assert reporting.DEFAULT_OUTPUT_DIR.name == "outputs"
     assert reporting.DEFAULT_OUTPUT_DIR.parent.name == "v2"
+
+
+def test_normalize_result_aceita_dict_de_tfidf_result(tmp_path: Path):
+    """save_all aceita o dict produzido por TfidfLinearResult.as_dict()."""
+    payload = {
+        "accuracy": 0.9,
+        "precision_macro": 0.88,
+        "recall_macro": 0.87,
+        "f1_macro": 0.875,
+        "confusion_matrix": [[2, 0, 0], [0, 2, 0], [0, 0, 2]],
+        "labels": ("negativo", "neutro", "positivo"),
+    }
+
+    written = reporting.save_all("tfidf-linear", payload, output_dir=tmp_path)
+
+    assert set(written.keys()) == {"metrics_csv", "result_json", "confusion_csv"}
+    for path in written.values():
+        assert path.exists()
+
+    json_payload = json.loads(written["result_json"].read_text(encoding="utf-8"))
+    assert json_payload["accuracy"] == 0.9
+    assert json_payload["confusion_matrix"] == [[2, 0, 0], [0, 2, 0], [0, 0, 2]]
+
+
+def test_save_result_json_bloqueia_path_traversal(tmp_path: Path):
+    """filename com '..' nao deve escapar do diretorio de saida."""
+    result = _sample_result()
+
+    target = reporting.save_result_json(
+        "tfidf-linear",
+        result,
+        output_dir=tmp_path,
+        filename="../escape.json",
+    )
+
+    assert target.parent == tmp_path
+    assert target.name == "escape.json"
+    assert target.exists()

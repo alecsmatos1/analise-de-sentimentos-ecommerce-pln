@@ -11,7 +11,7 @@ datasets.
 from __future__ import annotations
 
 import argparse
-import importlib
+import importlib.util
 import platform
 import sys
 import time
@@ -69,6 +69,11 @@ def _run_tfidf_fixture(seed: int) -> tuple[evaluation.EvaluationResult, dict]:
             ("tfidf", TfidfVectorizer(min_df=1, ngram_range=(1, 2))),
             (
                 "clf",
+                # random_state e passado por consistencia de interface, mas o
+                # solver "lbfgs" (padrao) nao usa aleatoriedade: o resultado e
+                # deterministico independente do seed. Para deterministismo
+                # real dependente do seed seria preciso trocar para
+                # solver="saga".
                 LogisticRegression(max_iter=1000, random_state=seed),
             ),
         ]
@@ -96,20 +101,34 @@ def _run_tfidf_fixture(seed: int) -> tuple[evaluation.EvaluationResult, dict]:
     return result, meta
 
 
-def _run_tfidf_full() -> tuple[evaluation.EvaluationResult, dict]:
-    try:
-        module = importlib.import_module("v2.src.experiments.run_tfidf_linear")
-    except ImportError as exc:  # pragma: no cover - depends on parallel sprints
+def _load_tfidf_module():
+    """Carrega run_tfidf_linear pelo caminho do arquivo, sem depender de pacote."""
+    # v2/ e v2/src/ nao expoem __init__.py, entao importlib.import_module
+    # ("v2.src.experiments.run_tfidf_linear") nao resolve. Usar
+    # spec_from_file_location evita a necessidade de transformar v2 em pacote.
+    mod_path = _SRC_DIR / "experiments" / "run_tfidf_linear.py"
+    if not mod_path.exists():
         raise SystemExit(
             "Experimento tfidf-linear sem --fixture exige "
-            "v2/src/experiments/run_tfidf_linear.py (sprint TF-IDF linear). "
-            f"Falha ao importar: {exc}"
+            f"{mod_path} (sprint TF-IDF linear). Arquivo nao encontrado."
         )
+    spec = importlib.util.spec_from_file_location("run_tfidf_linear", mod_path)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensivo
+        raise SystemExit(
+            f"Nao foi possivel preparar o loader para {mod_path}."
+        )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_tfidf_full() -> tuple[evaluation.EvaluationResult, dict]:
+    module = _load_tfidf_module()
 
     runner = getattr(module, "run", None)
     if runner is None:
         raise SystemExit(
-            "v2.src.experiments.run_tfidf_linear precisa expor uma funcao run()"
+            "run_tfidf_linear precisa expor uma funcao run()"
         )
     payload = runner()
     if isinstance(payload, tuple) and len(payload) == 2:

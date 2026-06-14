@@ -50,6 +50,16 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _safe_name(filename: str | None, default: str) -> str:
+    """Garante que filename nao contem componentes de caminho.
+
+    Bloqueia path traversal (".." ou caminho absoluto) reduzindo a entrada ao
+    nome final via ``Path(...).name``.
+    """
+    candidate = filename if filename else default
+    return Path(candidate).name or default
+
+
 def save_metrics_csv(
     experiment: str,
     result: Any,
@@ -63,7 +73,7 @@ def save_metrics_csv(
     """
     payload = _normalize_result(result)
     target_dir = ensure_output_dir(output_dir)
-    target = target_dir / filename
+    target = target_dir / _safe_name(filename, "metrics.csv")
     write_header = not target.exists()
     with target.open("a", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
@@ -92,7 +102,7 @@ def save_result_json(
     """Persist the full evaluation payload (including confusion matrix) as JSON."""
     payload = _normalize_result(result)
     target_dir = ensure_output_dir(output_dir)
-    target = target_dir / (filename or f"{experiment}.json")
+    target = target_dir / _safe_name(filename, f"{experiment}.json")
     body = {
         "experiment": experiment,
         "timestamp": _timestamp(),
@@ -123,7 +133,7 @@ def save_confusion_csv(
         raise ValueError("confusion matrix rows must match label count")
 
     target_dir = ensure_output_dir(output_dir)
-    target = target_dir / (filename or f"{experiment}_confusion.csv")
+    target = target_dir / _safe_name(filename, f"{experiment}_confusion.csv")
     with target.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(["real\\predito", *labels])
