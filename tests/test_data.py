@@ -17,7 +17,7 @@ from v2.src.data import (
 )
 
 
-def _fixture_df() -> pd.DataFrame:
+def _make_minimal_df() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "raw_text": [
@@ -69,7 +69,7 @@ def test_normalize_text_aplica_lowercase_e_remove_acento_e_pontuacao():
 
 
 def test_coerce_corpus_remove_texto_vazio_e_label_invalido():
-    df = _fixture_df()
+    df = _make_minimal_df()
     result = coerce_corpus(df)
 
     assert list(result.columns) == list(REQUIRED_COLUMNS)
@@ -79,7 +79,7 @@ def test_coerce_corpus_remove_texto_vazio_e_label_invalido():
 
 
 def test_coerce_corpus_gera_clean_text_quando_ausente():
-    df = _fixture_df()
+    df = _make_minimal_df()
     result = coerce_corpus(df)
 
     assert "clean_text" in result.columns
@@ -89,7 +89,7 @@ def test_coerce_corpus_gera_clean_text_quando_ausente():
 
 
 def test_coerce_corpus_preserva_clean_text_quando_presente():
-    df = _fixture_df()
+    df = _make_minimal_df()
     # Fornece clean_text pre-computado distinto da normalizacao default para
     # garantir que o valor existente seja preservado sem reprocessar.
     df["clean_text"] = [
@@ -116,13 +116,34 @@ def test_coerce_corpus_falha_se_coluna_obrigatoria_ausente():
 
 
 def test_coerce_corpus_falha_com_allowed_labels_vazio():
-    df = _fixture_df()
+    df = _make_minimal_df()
     with pytest.raises(ValueError, match="allowed_labels"):
         coerce_corpus(df, allowed_labels=[])
 
 
 def test_coerce_corpus_respeita_allowed_labels_customizado():
-    df = _fixture_df()
+    df = _make_minimal_df()
     result = coerce_corpus(df, allowed_labels=[LABEL_POSITIVE])
     assert set(result["label"]) == {LABEL_POSITIVE}
     assert (result["raw_text"].str.len() > 0).all()
+
+
+def test_normalize_text_com_none_retorna_string_vazia():
+    assert normalize_text(None) == ""
+
+
+def test_normalize_text_com_string_normal_funciona():
+    assert normalize_text("Texto COM Acento ção") == "texto com acento cao"
+
+
+def test_coerce_corpus_aceita_allowed_labels_como_generator():
+    df = pd.DataFrame(
+        {
+            "raw_text": ["bom", "ruim", "ok"],
+            "label": [LABEL_POSITIVE, LABEL_NEGATIVE, LABEL_NEUTRAL],
+            "source": ["s"] * 3,
+        }
+    )
+    gen = (x for x in [LABEL_POSITIVE, LABEL_NEGATIVE, LABEL_NEUTRAL])
+    result = coerce_corpus(df, allowed_labels=gen)
+    assert len(result) == 3

@@ -57,15 +57,19 @@ def rating_to_label(rating: int | float) -> str:
     return ""
 
 
-def normalize_text(text: str) -> str:
+def normalize_text(text: str | None) -> str:
     """Normaliza texto para uso em representacoes esparsas (TF-IDF).
 
     Aplica lowercase, remove acentos via decomposicao NFD, descarta qualquer
     caractere que nao seja letra ASCII, digito ou espaco, e colapsa espacos.
     Usa somente a stdlib para manter o contrato sem dependencias extras.
+    Aceita `None` para alinhar com chamadores que ainda nao passaram pela
+    `coerce_corpus` (que protege via `.fillna("")`).
     """
 
-    text = text.lower()
+    if text is None:
+        return ""
+    text = str(text).lower()
     text = unicodedata.normalize("NFD", text)
     text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
     text = _NON_ALPHANUMERIC.sub(" ", text)
@@ -76,7 +80,7 @@ def normalize_text(text: str) -> str:
 def coerce_corpus(
     df: pd.DataFrame,
     *,
-    allowed_labels: Iterable[str] | None = SENTIMENT_LABELS,
+    allowed_labels: Iterable[str] | None = None,
 ) -> pd.DataFrame:
     """Valida e normaliza um DataFrame para o contrato da v2.
 
@@ -88,14 +92,19 @@ def coerce_corpus(
     as colunas de `REQUIRED_COLUMNS` na ordem canonica.
     """
 
+    # Materializa allowed_labels imediatamente: aceitar Iterable significa que
+    # geradores tambem sao validos e nao podem ser iterados duas vezes.
+    _allowed: set[str] = (
+        set(allowed_labels) if allowed_labels is not None else set(SENTIMENT_LABELS)
+    )
+
     missing = [column for column in _REQUIRED_INPUT_COLUMNS if column not in df.columns]
     if missing:
         raise ValueError(
             f"corpus invalido: colunas obrigatorias ausentes {missing}"
         )
 
-    allowed = set(allowed_labels) if allowed_labels is not None else set(SENTIMENT_LABELS)
-    if not allowed:
+    if not _allowed:
         raise ValueError("allowed_labels nao pode ser vazio")
 
     cleaned = df.copy()
@@ -108,6 +117,6 @@ def coerce_corpus(
     else:
         cleaned["clean_text"] = cleaned["raw_text"].apply(normalize_text)
 
-    mask = cleaned["raw_text"].str.len().gt(0) & cleaned["label"].isin(allowed)
+    mask = cleaned["raw_text"].str.len().gt(0) & cleaned["label"].isin(_allowed)
     cleaned = cleaned.loc[mask, list(REQUIRED_COLUMNS)].reset_index(drop=True)
     return cleaned
