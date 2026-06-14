@@ -29,9 +29,11 @@ if str(_REPO_ROOT) not in sys.path:
 
 import evaluation  # noqa: E402  (path-injection-dependent import)
 import reporting  # noqa: E402
+import reporting_compare  # noqa: E402
 
 
 SUPPORTED_EXPERIMENTS = ("tfidf-linear", "baseline", "symbolic")
+SUPPORTED_REPORTS = ("compare",)
 
 
 _FIXTURE_TRAIN: list[tuple[str, str]] = [
@@ -214,9 +216,19 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--experiment",
-        required=True,
+        required=False,
         choices=SUPPORTED_EXPERIMENTS,
         help="Identificador do experimento a executar.",
+    )
+    parser.add_argument(
+        "--report",
+        required=False,
+        choices=SUPPORTED_REPORTS,
+        help=(
+            "Gera um relatorio agregado a partir dos JSONs ja persistidos. "
+            "Use 'compare' para consolidar todos os experimentos em "
+            "comparison_table.csv + comparison_report.md."
+        ),
     )
     parser.add_argument(
         "--fixture",
@@ -263,8 +275,30 @@ def _format_summary(experiment: str, result: evaluation.EvaluationResult) -> str
     )
 
 
+def _run_compare_report(output_dir: str | None) -> int:
+    """Consolida JSONs de v2/outputs em tabela CSV + relatorio Markdown."""
+    target_dir = Path(output_dir) if output_dir else reporting.DEFAULT_OUTPUT_DIR
+    df = reporting_compare.build_comparison_table(outputs_dir=target_dir)
+    print(df.to_string(index=False))
+    csv_path = reporting_compare.save_comparison_csv(df, outputs_dir=target_dir)
+    md_path = reporting_compare.save_comparison_report(df, outputs_dir=target_dir)
+    print("Artefatos gerados:")
+    print(f"  comparison_csv: {csv_path}")
+    print(f"  comparison_md:  {md_path}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if args.report is not None and args.experiment is not None:
+        parser.error("--report e --experiment sao mutuamente exclusivos.")
+    if args.report is None and args.experiment is None:
+        parser.error("informe --experiment <id> ou --report <nome>.")
+
+    if args.report == "compare":
+        return _run_compare_report(args.output_dir)
 
     if args.experiment == "tfidf-linear":
         if args.fixture:
