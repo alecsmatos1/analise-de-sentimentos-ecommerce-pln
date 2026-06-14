@@ -44,6 +44,7 @@ SUPPORTED_EXPERIMENTS = (
     "symbolic",
     "word2vec-linear",
     "bert-embeddings-linear",
+    "llm",
 )
 SUPPORTED_REPORTS = ("compare",)
 
@@ -253,6 +254,22 @@ def _run_bert_embeddings_linear_full(
     return _coerce_runner_result(payload), {"mode": "full"}
 
 
+def _run_llm_full(
+    corpus_path: Path | None = None,
+) -> tuple[evaluation.EvaluationResult, dict]:
+    """Executa LLM zero-shot via ``v2/src/experiments/run_llm.py``."""
+
+    module = importlib.import_module("v2.src.experiments.run_llm")
+    runner = getattr(module, "run", None)
+    if runner is None:
+        raise SystemExit("run_llm precisa expor uma funcao run()")
+    raw_result = runner(corpus_path=corpus_path)
+    payload = raw_result.as_dict() if hasattr(raw_result, "as_dict") else raw_result
+    meta = dict(payload.get("meta") or {})
+    meta.setdefault("mode", "full")
+    return _coerce_runner_result(payload), meta
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="v2/run_experiment.py",
@@ -362,6 +379,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.experiment == "bert-embeddings-linear":
         corpus_path = Path(args.corpus_path) if args.corpus_path else None
         result, meta = _run_bert_embeddings_linear_full(corpus_path=corpus_path)
+    elif args.experiment == "llm":
+        corpus_path = Path(args.corpus_path) if args.corpus_path else None
+        result, meta = _run_llm_full(corpus_path=corpus_path)
     else:  # pragma: no cover - guarded by argparse choices
         raise SystemExit(f"Experimento nao suportado: {args.experiment}")
 
