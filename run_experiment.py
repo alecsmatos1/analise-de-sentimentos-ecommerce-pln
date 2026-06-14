@@ -31,7 +31,7 @@ import evaluation  # noqa: E402  (path-injection-dependent import)
 import reporting  # noqa: E402
 
 
-SUPPORTED_EXPERIMENTS = ("tfidf-linear", "baseline")
+SUPPORTED_EXPERIMENTS = ("tfidf-linear", "baseline", "symbolic")
 
 
 _FIXTURE_TRAIN: list[tuple[str, str]] = [
@@ -195,6 +195,18 @@ def _run_baseline_full(corpus_path: Path | None = None) -> tuple[evaluation.Eval
     return _coerce_runner_result(payload), {"mode": "full"}
 
 
+def _run_symbolic_full(corpus_path: Path | None = None) -> tuple[evaluation.EvaluationResult, dict]:
+    """Executa o analisador simbolico via ``v2/src/experiments/run_symbolic.py``."""
+
+    module = importlib.import_module("v2.src.experiments.run_symbolic")
+    runner = getattr(module, "run", None)
+    if runner is None:
+        raise SystemExit("run_symbolic precisa expor uma funcao run()")
+    raw_result = runner(corpus_path=corpus_path)
+    payload = raw_result.as_dict() if hasattr(raw_result, "as_dict") else raw_result
+    return _coerce_runner_result(payload), {"mode": "full"}
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="v2/run_experiment.py",
@@ -263,6 +275,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.experiment == "baseline":
         corpus_path = Path(args.corpus_path) if args.corpus_path else None
         result, meta = _run_baseline_full(corpus_path=corpus_path)
+    elif args.experiment == "symbolic":
+        corpus_path = Path(args.corpus_path) if args.corpus_path else None
+        result, meta = _run_symbolic_full(corpus_path=corpus_path)
     else:  # pragma: no cover - guarded by argparse choices
         raise SystemExit(f"Experimento nao suportado: {args.experiment}")
 
