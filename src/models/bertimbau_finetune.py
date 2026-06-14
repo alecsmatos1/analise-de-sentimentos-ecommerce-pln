@@ -177,12 +177,18 @@ def train_and_evaluate(
         **_device_kwarg,
     )
 
+    _trainer_params = _inspect.signature(Trainer.__init__).parameters
+    _tokenizer_kwarg = (
+        {"processing_class": tokenizer}
+        if "processing_class" in _trainer_params
+        else {"tokenizer": tokenizer}
+    )
     trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_ds,
         eval_dataset=test_ds,
-        tokenizer=tokenizer,
+        **_tokenizer_kwarg,
     )
 
     started = time.perf_counter()
