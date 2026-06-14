@@ -155,6 +155,13 @@ def train_and_evaluate(
         label2id=label2id,
     )
 
+    import inspect as _inspect
+    _ta_params = _inspect.signature(TrainingArguments.__init__).parameters
+    _device_kwarg = (
+        {"use_cpu": device_used != "cuda"}
+        if "use_cpu" in _ta_params
+        else {"no_cuda": device_used != "cuda"}
+    )
     training_args = TrainingArguments(
         output_dir=cfg.output_dir,
         num_train_epochs=cfg.num_epochs,
@@ -167,7 +174,7 @@ def train_and_evaluate(
         logging_steps=50,
         save_strategy="no",
         report_to=[],
-        no_cuda=(device_used != "cuda"),
+        **_device_kwarg,
     )
 
     trainer = Trainer(
