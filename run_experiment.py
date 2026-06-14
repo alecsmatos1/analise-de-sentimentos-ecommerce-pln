@@ -44,6 +44,7 @@ SUPPORTED_EXPERIMENTS = (
     "symbolic",
     "word2vec-linear",
     "bert-embeddings-linear",
+    "bert-finetune",
 )
 SUPPORTED_REPORTS = ("compare",)
 
@@ -253,6 +254,25 @@ def _run_bert_embeddings_linear_full(
     return _coerce_runner_result(payload), {"mode": "full"}
 
 
+def _run_bert_finetune_full(
+    corpus_path: Path | None = None,
+) -> tuple[evaluation.EvaluationResult, dict]:
+    """Executa BERTimbau fine-tuned via ``run_bert_finetune.py``."""
+
+    module = importlib.import_module("v2.src.experiments.run_bert_finetune")
+    runner = getattr(module, "run", None)
+    if runner is None:
+        raise SystemExit("run_bert_finetune precisa expor uma funcao run()")
+    payload = runner(corpus_path=corpus_path)
+    if not isinstance(payload, dict):
+        raise SystemExit(
+            "run_bert_finetune.run() deve devolver dict serializavel."
+        )
+    meta = dict(payload.get("meta") or {})
+    meta.setdefault("mode", "full")
+    return _coerce_runner_result(payload), meta
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="v2/run_experiment.py",
@@ -362,6 +382,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     elif args.experiment == "bert-embeddings-linear":
         corpus_path = Path(args.corpus_path) if args.corpus_path else None
         result, meta = _run_bert_embeddings_linear_full(corpus_path=corpus_path)
+    elif args.experiment == "bert-finetune":
+        corpus_path = Path(args.corpus_path) if args.corpus_path else None
+        result, meta = _run_bert_finetune_full(corpus_path=corpus_path)
     else:  # pragma: no cover - guarded by argparse choices
         raise SystemExit(f"Experimento nao suportado: {args.experiment}")
 
