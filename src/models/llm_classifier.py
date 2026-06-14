@@ -31,7 +31,7 @@ _RESPONSE_SCHEMA = {
 @dataclass(frozen=True)
 class LLMConfig:
     """Configuracao do classificador LLM."""
-    model: str = "gemini-2.5-flash-lite"
+    model: str = "gemini-2.0-flash"
     temperature: float = 0.0
     max_tokens: int = 20
     prompt_template: str = PROMPT_TEMPLATE
