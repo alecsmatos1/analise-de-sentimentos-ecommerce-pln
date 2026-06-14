@@ -17,6 +17,26 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SEED = 42
 DEFAULT_TEST_SIZE = 0.2
 
+PROCESSED_CORPUS_PATH: Path = REPO_ROOT / "v2" / "data" / "processed" / "corpus.csv"
+
+
+def validate_config() -> list[str]:
+    """Verifica a configuracao e retorna lista de avisos/erros.
+
+    Lista vazia indica configuracao valida. Nao levanta excecao: o caller
+    decide o que fazer com os avisos (logar, abortar, imprimir).
+    """
+
+    issues: list[str] = []
+
+    if not PROCESSED_CORPUS_PATH.exists():
+        issues.append(
+            f"PROCESSED_CORPUS_PATH nao encontrado: {PROCESSED_CORPUS_PATH}. "
+            "Execute corpus_loader.save_corpus() para gerar o corpus processado."
+        )
+
+    return issues
+
 
 @dataclass(frozen=True)
 class V2Config:
