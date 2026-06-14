@@ -5,15 +5,7 @@ Sem dependencia de dados externos.
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pandas as pd
-import pytest
-
-_ROOT = Path(__file__).resolve().parents[2]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from v2.src.data import coerce_corpus
 from v2.src.splitting import stratified_split

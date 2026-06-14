@@ -11,8 +11,6 @@ from __future__ import annotations
 from collections import Counter
 from typing import List, Mapping
 
-import pytest
-
 
 def test_fixture_nao_esta_vazia(sample_reviews: List[Mapping[str, object]]) -> None:
     assert sample_reviews, "fixture demonstrativa nao pode ser vazia"
@@ -138,20 +136,9 @@ def test_required_columns_contem_colunas_canonicas(
 
 
 def test_required_columns_consistente_com_src_data() -> None:
-    """Quando ``v2.src.data`` estiver disponivel, REQUIRED_COLUMNS deve ser igual.
-
-    No worktree isolado (sem ``v2.src.data``) este teste e marcado como skip.
-    Apos integrar na branch ``v2-integracao``, ele passa a verificar a igualdade
-    entre o contrato dos testes e a fonte de verdade em ``v2/src/data.py``.
-    """
-
-    try:
-        from v2.src.data import REQUIRED_COLUMNS as src_cols
-    except ImportError:
-        pytest.skip("v2.src.data ainda nao integrado - verificar apos merge")
-
+    from v2.src.data import REQUIRED_COLUMNS as src_cols
     from v2.tests.conftest import REQUIRED_COLUMNS as test_cols
 
     assert frozenset(src_cols) == test_cols, (
-        f"Divergencia entre contratos: src={set(src_cols)} vs conftest={test_cols}"
+        f"Divergencia: src={set(src_cols)} vs conftest={test_cols}"
     )
