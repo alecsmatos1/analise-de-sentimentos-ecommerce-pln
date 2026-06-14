@@ -274,6 +274,8 @@ def _run_bert_finetune_full(
 
 def _run_llm_full(
     corpus_path: Path | None = None,
+    sample_size: int | None = None,
+    write_predictions: bool = True,
 ) -> tuple[evaluation.EvaluationResult, dict]:
     """Executa LLM zero-shot via ``v2/src/experiments/run_llm.py``."""
 
@@ -281,7 +283,10 @@ def _run_llm_full(
     runner = getattr(module, "run", None)
     if runner is None:
         raise SystemExit("run_llm precisa expor uma funcao run()")
-    raw_result = runner(corpus_path=corpus_path)
+    kwargs: dict = {"corpus_path": corpus_path, "write_predictions": write_predictions}
+    if sample_size is not None:
+        kwargs["sample_size"] = sample_size
+    raw_result = runner(**kwargs)
     payload = raw_result.as_dict() if hasattr(raw_result, "as_dict") else raw_result
     meta = dict(payload.get("meta") or {})
     meta.setdefault("mode", "full")
@@ -338,6 +343,13 @@ def _build_parser() -> argparse.ArgumentParser:
             "Caminho para o corpus processado (CSV ou parquet). "
             "Requerido no modo nao-fixture."
         ),
+    )
+    parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Tamanho da amostra (apenas para experimentos que suportam amostragem, ex: llm).",
     )
     return parser
 
@@ -402,7 +414,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         result, meta = _run_bert_finetune_full(corpus_path=corpus_path)
     elif args.experiment == "llm":
         corpus_path = Path(args.corpus_path) if args.corpus_path else None
-        result, meta = _run_llm_full(corpus_path=corpus_path)
+        result, meta = _run_llm_full(
+            corpus_path=corpus_path,
+            sample_size=args.sample_size,
+            write_predictions=not args.no_write,
+        )
     else:  # pragma: no cover - guarded by argparse choices
         raise SystemExit(f"Experimento nao suportado: {args.experiment}")
 
