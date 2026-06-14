@@ -6,11 +6,7 @@ respeitem as colunas e os rotulos comuns acordados em ``v2/avaliacao.md`` e
 ``v2/arquitetura.md``.
 
 As constantes ``REQUIRED_COLUMNS`` e ``ALLOWED_LABELS`` sao importadas de
-``v2.src.data`` quando disponivel (cenario integrado, apos merge das sprints).
-Em worktrees isolados, onde ``v2/src/data.py`` ainda nao existe, os mesmos
-valores sao definidos localmente como fallback. O teste
-``test_required_columns_consistente_com_src_data`` em ``test_contracts.py``
-verifica automaticamente que ambas as definicoes nao divergem.
+``v2.src.data``, que e a fonte canonica apos a integracao da Wave 01.
 """
 
 from __future__ import annotations
@@ -27,17 +23,13 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 REPO_ROOT = _PROJECT_ROOT  # alias used by sprint tests from core-data
 
-try:
-    from v2.src.data import (  # type: ignore[import-not-found]
-        REQUIRED_COLUMNS as _SRC_COLS,
-        SENTIMENT_LABELS as _SRC_LABELS,
-    )
+from v2.src.data import (
+    REQUIRED_COLUMNS as _SRC_COLS,
+    SENTIMENT_LABELS as _SRC_LABELS,
+)
 
-    REQUIRED_COLUMNS = frozenset(_SRC_COLS)
-    ALLOWED_LABELS = frozenset(_SRC_LABELS)
-except ImportError:
-    REQUIRED_COLUMNS = frozenset({"raw_text", "clean_text", "label", "source"})
-    ALLOWED_LABELS = frozenset({"positivo", "neutro", "negativo"})
+REQUIRED_COLUMNS = frozenset(_SRC_COLS)
+ALLOWED_LABELS = frozenset(_SRC_LABELS)
 
 OPTIONAL_COLUMNS = frozenset({"score"})
 SCORE_TO_LABEL: Mapping[int, str] = {

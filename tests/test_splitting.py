@@ -9,7 +9,7 @@ from v2.src.data import LABEL_NEGATIVE, LABEL_NEUTRAL, LABEL_POSITIVE, REQUIRED_
 from v2.src.splitting import StratifiedSplit, stratified_split
 
 
-def _balanced_fixture(per_class: int = 10) -> pd.DataFrame:
+def _make_balanced_df(per_class: int = 10) -> pd.DataFrame:
     rows = []
     for i in range(per_class):
         rows.append((f"texto positivo {i}", f"texto positivo {i}", LABEL_POSITIVE, "b2w"))
@@ -19,7 +19,7 @@ def _balanced_fixture(per_class: int = 10) -> pd.DataFrame:
 
 
 def test_stratified_split_preserva_proporcoes_e_tamanho():
-    df = _balanced_fixture(per_class=10)
+    df = _make_balanced_df(per_class=10)
     split = stratified_split(df, seed=42, test_size=0.2)
 
     assert isinstance(split, StratifiedSplit)
@@ -37,7 +37,7 @@ def test_stratified_split_preserva_proporcoes_e_tamanho():
 
 
 def test_stratified_split_e_deterministico_com_mesma_seed():
-    df = _balanced_fixture(per_class=10)
+    df = _make_balanced_df(per_class=10)
     a = stratified_split(df, seed=7)
     b = stratified_split(df, seed=7)
     pd.testing.assert_frame_equal(a.train, b.train)
@@ -45,7 +45,7 @@ def test_stratified_split_e_deterministico_com_mesma_seed():
 
 
 def test_stratified_split_difere_com_seed_diferente():
-    df = _balanced_fixture(per_class=10)
+    df = _make_balanced_df(per_class=10)
     a = stratified_split(df, seed=1)
     b = stratified_split(df, seed=2)
     # Mesmas linhas no total, mas ordens distintas em pelo menos um lado.
@@ -54,7 +54,7 @@ def test_stratified_split_difere_com_seed_diferente():
 
 
 def test_stratified_split_mantem_contrato_de_quatro_colunas():
-    df = _balanced_fixture()
+    df = _make_balanced_df()
     split = stratified_split(df)
     assert list(split.train.columns) == list(REQUIRED_COLUMNS)
     assert list(split.test.columns) == list(REQUIRED_COLUMNS)
@@ -62,7 +62,7 @@ def test_stratified_split_mantem_contrato_de_quatro_colunas():
 
 
 def test_stratified_split_falha_com_test_size_invalido():
-    df = _balanced_fixture()
+    df = _make_balanced_df()
     with pytest.raises(ValueError, match="test_size"):
         stratified_split(df, test_size=0.0)
     with pytest.raises(ValueError, match="test_size"):
