@@ -76,9 +76,10 @@ class TestPipelineEndToEnd:
             split.test["label"].tolist(),
         )
         # nao deve lancar excecao
-        reporting.save_all("tfidf-linear", result.as_dict(), output_dir=tmp_path)
-        # verifica artefatos gerados
-        assert (tmp_path / "tfidf-linear_result.json").exists()
+        written = reporting.save_all("tfidf-linear", result.as_dict(), output_dir=tmp_path)
+        # verifica artefatos gerados (usa o Path retornado por save_all,
+        # evita acoplar o teste a convencao interna de nomes do reporting)
+        assert written["result_json"].exists()
 
     def test_pipeline_completo_gera_tres_artefatos(self, tmp_path):
         """Pipeline completo deve gerar JSON + CSV de metricas + CSV de confusao."""
