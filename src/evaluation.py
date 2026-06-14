@@ -6,17 +6,19 @@ confusion matrix over the fixed label set ``(negativo, neutro, positivo)``.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Sequence
 
 from sklearn.metrics import (
     accuracy_score,
+    classification_report,
     confusion_matrix,
     precision_recall_fscore_support,
 )
 
 
 LABELS: tuple[str, ...] = ("negativo", "neutro", "positivo")
+_METRIC_DECIMALS = 4
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,7 @@ class EvaluationResult:
     f1_macro: float
     confusion_matrix: list[list[int]]
     labels: tuple[str, ...] = LABELS
+    per_class: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return {
@@ -36,6 +39,9 @@ class EvaluationResult:
             "f1_macro": self.f1_macro,
             "labels": list(self.labels),
             "confusion_matrix": [list(row) for row in self.confusion_matrix],
+            "per_class": {
+                label: dict(metrics) for label, metrics in self.per_class.items()
+            },
         }
 
 
@@ -65,11 +71,29 @@ def evaluate(
         zero_division=0,
     )
     matrix = confusion_matrix(y_true, y_pred, labels=label_list).tolist()
+    report = classification_report(
+        y_true,
+        y_pred,
+        labels=label_list,
+        output_dict=True,
+        zero_division=0,
+    )
+    per_class = {
+        label: {
+            "precision": round(float(report[label]["precision"]), _METRIC_DECIMALS),
+            "recall": round(float(report[label]["recall"]), _METRIC_DECIMALS),
+            "f1": round(float(report[label]["f1-score"]), _METRIC_DECIMALS),
+            "support": int(report[label]["support"]),
+        }
+        for label in label_list
+        if label in report
+    }
     return EvaluationResult(
-        accuracy=round(acc, 4),
-        precision_macro=round(float(precision), 4),
-        recall_macro=round(float(recall), 4),
-        f1_macro=round(float(f1), 4),
+        accuracy=round(acc, _METRIC_DECIMALS),
+        precision_macro=round(float(precision), _METRIC_DECIMALS),
+        recall_macro=round(float(recall), _METRIC_DECIMALS),
+        f1_macro=round(float(f1), _METRIC_DECIMALS),
         confusion_matrix=[[int(value) for value in row] for row in matrix],
         labels=tuple(label_list),
+        per_class=per_class,
     )
