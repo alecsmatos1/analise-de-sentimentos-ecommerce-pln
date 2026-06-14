@@ -24,7 +24,12 @@ DEFAULT_LABEL_ORDER: tuple[str, ...] = ("negativo", "neutro", "positivo")
 
 @dataclass(frozen=True)
 class TfidfLinearResult:
-    """Resultado do experimento TF-IDF + linear."""
+    """Resultado do experimento TF-IDF + linear.
+
+    O campo `pipeline` e dado interno do experimento: fica disponivel para
+    reuso (re-score, debug, inspecao de features) mas nao deve aparecer em
+    serializacoes (CSV/JSON) — por isso esta fora de `as_dict()`.
+    """
 
     accuracy: float
     precision_macro: float
@@ -34,6 +39,18 @@ class TfidfLinearResult:
     label_order: tuple[str, ...]
     model_name: str
     pipeline: Pipeline
+
+    def as_dict(self) -> dict:
+        """Projecao serializavel compativel com o contrato de `reporting.py`."""
+
+        return {
+            "accuracy": self.accuracy,
+            "precision_macro": self.precision_macro,
+            "recall_macro": self.recall_macro,
+            "f1_macro": self.f1_macro,
+            "confusion_matrix": self.confusion_matrix,
+            "labels": self.label_order,
+        }
 
 
 def build_tfidf_linear_pipeline(
@@ -64,6 +81,13 @@ def run_tfidf_linear(
 
     Os argumentos `X_*` e `y_*` representam um split ja realizado por outro
     componente (por exemplo, `v2/src/splitting.py` quando estiver disponivel).
+
+    Contrato de entrada textual:
+        `X_train` e `X_test` devem ser sequencias de textos ja normalizados
+        — tipicamente a coluna `clean_text` produzida por `coerce_corpus()`
+        / `normalize_text` da sprint core-data. Nao passe a coluna `text`
+        crua: o TF-IDF foi calibrado para o texto limpo do contrato canonico
+        da v2.
     """
 
     pipeline = build_tfidf_linear_pipeline(tfidf_config, model_config)

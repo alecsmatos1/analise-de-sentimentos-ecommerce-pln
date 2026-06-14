@@ -173,3 +173,64 @@ def test_run_tfidf_linear_respects_custom_label_order(
         label_order=custom_order,
     )
     assert result.label_order == custom_order
+
+
+def test_result_as_dict_tem_campos_esperados(
+    synthetic_split: tuple[list[str], list[str], list[str], list[str]],
+) -> None:
+    X_train, y_train, X_test, y_test = synthetic_split
+    result = run_tfidf_linear(
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        tfidf_config=TfidfConfig(min_df=1, max_df=1.0, ngram_range=(1, 1)),
+    )
+    expected = {
+        "accuracy",
+        "precision_macro",
+        "recall_macro",
+        "f1_macro",
+        "confusion_matrix",
+        "labels",
+    }
+    assert set(result.as_dict().keys()) == expected
+
+
+def test_result_as_dict_tipos_corretos(
+    synthetic_split: tuple[list[str], list[str], list[str], list[str]],
+) -> None:
+    X_train, y_train, X_test, y_test = synthetic_split
+    result = run_tfidf_linear(
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        tfidf_config=TfidfConfig(min_df=1, max_df=1.0, ngram_range=(1, 1)),
+    )
+    payload = result.as_dict()
+    assert isinstance(payload["accuracy"], float)
+    assert isinstance(payload["precision_macro"], float)
+    assert isinstance(payload["recall_macro"], float)
+    assert isinstance(payload["f1_macro"], float)
+    assert isinstance(payload["confusion_matrix"], list)
+    assert all(isinstance(row, list) for row in payload["confusion_matrix"])
+    assert all(
+        isinstance(value, int)
+        for row in payload["confusion_matrix"]
+        for value in row
+    )
+
+
+def test_result_as_dict_nao_contem_pipeline(
+    synthetic_split: tuple[list[str], list[str], list[str], list[str]],
+) -> None:
+    X_train, y_train, X_test, y_test = synthetic_split
+    result = run_tfidf_linear(
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        tfidf_config=TfidfConfig(min_df=1, max_df=1.0, ngram_range=(1, 1)),
+    )
+    assert "pipeline" not in result.as_dict()
