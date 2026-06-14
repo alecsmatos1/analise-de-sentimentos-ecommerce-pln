@@ -31,7 +31,7 @@ import evaluation  # noqa: E402  (path-injection-dependent import)
 import reporting  # noqa: E402
 
 
-SUPPORTED_EXPERIMENTS = ("tfidf-linear",)
+SUPPORTED_EXPERIMENTS = ("tfidf-linear", "baseline")
 
 
 _FIXTURE_TRAIN: list[tuple[str, str]] = [
@@ -160,6 +160,7 @@ def _coerce_runner_result(payload: object) -> evaluation.EvaluationResult:
         f1_macro=float(payload["f1_macro"]),
         confusion_matrix=[[int(v) for v in row] for row in payload["confusion_matrix"]],
         labels=labels,
+        per_class=dict(payload.get("per_class") or {}),
     )
 
 
@@ -180,6 +181,18 @@ def _run_tfidf_full(corpus_path: Path | None = None) -> tuple[evaluation.Evaluat
         meta = {}
     meta.setdefault("mode", "full")
     return _coerce_runner_result(raw_result), meta
+
+
+def _run_baseline_full(corpus_path: Path | None = None) -> tuple[evaluation.EvaluationResult, dict]:
+    """Executa o baseline majoritario via ``v2/src/experiments/run_baseline.py``."""
+
+    module = importlib.import_module("v2.src.experiments.run_baseline")
+    runner = getattr(module, "run", None)
+    if runner is None:
+        raise SystemExit("run_baseline precisa expor uma funcao run()")
+    raw_result = runner(corpus_path=corpus_path)
+    payload = raw_result.as_dict() if hasattr(raw_result, "as_dict") else raw_result
+    return _coerce_runner_result(payload), {"mode": "full"}
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -247,6 +260,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             corpus_path = Path(args.corpus_path) if args.corpus_path else None
             result, meta = _run_tfidf_full(corpus_path=corpus_path)
+    elif args.experiment == "baseline":
+        corpus_path = Path(args.corpus_path) if args.corpus_path else None
+        result, meta = _run_baseline_full(corpus_path=corpus_path)
     else:  # pragma: no cover - guarded by argparse choices
         raise SystemExit(f"Experimento nao suportado: {args.experiment}")
 
