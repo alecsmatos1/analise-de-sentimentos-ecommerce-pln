@@ -90,3 +90,46 @@ def test_as_dict_preserves_metrics_and_matrix():
         [0, 0, 0],
         [0, 0, 1],
     ]
+
+
+def test_evaluate_retorna_per_class():
+    """evaluate() deve incluir metricas por classe no resultado."""
+    y_true = ["negativo", "neutro", "positivo", "positivo", "negativo", "neutro"]
+    y_pred = ["negativo", "neutro", "positivo", "negativo", "negativo", "positivo"]
+
+    result = evaluation.evaluate(y_true, y_pred)
+
+    assert hasattr(result, "per_class")
+    pc = result.per_class
+    for label in ("negativo", "neutro", "positivo"):
+        assert label in pc
+        for campo in ("precision", "recall", "f1", "support"):
+            assert campo in pc[label]
+
+
+def test_per_class_metricas_arredondadas():
+    """Metricas de per_class devem ter no maximo 4 casas decimais."""
+    y_true = ["negativo", "neutro", "positivo", "positivo", "negativo", "neutro"]
+    y_pred = ["negativo", "neutro", "positivo", "negativo", "negativo", "positivo"]
+
+    result = evaluation.evaluate(y_true, y_pred, labels=evaluation.LABELS)
+    pc = result.per_class
+    for label, metrics in pc.items():
+        for campo in ("precision", "recall", "f1"):
+            val = metrics[campo]
+            assert val == round(val, 4)
+        assert isinstance(metrics["support"], int)
+
+
+def test_as_dict_inclui_per_class():
+    """as_dict() deve conter chave per_class."""
+    y_true = ["negativo", "neutro", "positivo", "positivo"]
+    y_pred = ["negativo", "neutro", "positivo", "negativo"]
+
+    result = evaluation.evaluate(y_true, y_pred, labels=evaluation.LABELS)
+    d = result.as_dict()
+
+    assert "per_class" in d
+    assert isinstance(d["per_class"], dict)
+    for label in evaluation.LABELS:
+        assert label in d["per_class"]
