@@ -277,3 +277,49 @@ def test_as_dict_metricas_com_4_casas(
         assert val == round(val, 4), (
             f"{field}={val} tem mais de 4 casas decimais"
         )
+
+
+def test_run_com_csv_sintetico_retorna_dict_valido(tmp_path):
+    """run() com CSV real (sintetico) deve retornar dict com campos esperados."""
+    import pandas as pd
+    from v2.src.experiments.run_tfidf_linear import run
+
+    # corpus sintetico com as 4 colunas canonicas
+    n = 10  # suficiente para split estratificado (min 2 por classe)
+    rows = []
+    for label in ["positivo", "neutro", "negativo"]:
+        for i in range(n):
+            rows.append({
+                "raw_text": f"review {label} numero {i}",
+                "label": label,
+                "source": "synthetic",
+            })
+    csv_path = tmp_path / "corpus_test.csv"
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+
+    result = run(corpus_path=csv_path)
+
+    assert isinstance(result, dict)
+    for campo in ("accuracy", "precision_macro", "recall_macro", "f1_macro",
+                  "confusion_matrix", "labels"):
+        assert campo in result, f"Campo ausente: {campo}"
+    assert 0.0 <= result["accuracy"] <= 1.0
+    assert isinstance(result["labels"], list)
+
+
+def test_run_metricas_arredondadas_4_casas(tmp_path):
+    """run() via CSV deve retornar metricas com no maximo 4 casas decimais."""
+    import pandas as pd
+    from v2.src.experiments.run_tfidf_linear import run
+
+    rows = []
+    for label in ["positivo", "neutro", "negativo"]:
+        for i in range(8):
+            rows.append({"raw_text": f"texto {label} {i}", "label": label, "source": "s"})
+    csv_path = tmp_path / "c.csv"
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+
+    result = run(corpus_path=csv_path)
+    for campo in ("accuracy", "precision_macro", "recall_macro", "f1_macro"):
+        val = result[campo]
+        assert val == round(val, 4), f"{campo}={val} tem mais de 4 casas decimais"
