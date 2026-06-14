@@ -6,12 +6,13 @@ recursos, nao escreve em disco e nao depende de modulos externos a `v2/`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Sequence, Union
 
 from sklearn.metrics import (
     accuracy_score,
+    classification_report,
     confusion_matrix,
     precision_recall_fscore_support,
 )
@@ -71,6 +72,7 @@ class TfidfLinearResult:
     label_order: tuple[str, ...]
     model_name: str
     pipeline: Pipeline
+    per_class: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         """Projecao serializavel compativel com o contrato de `reporting.py`."""
@@ -82,6 +84,9 @@ class TfidfLinearResult:
             "f1_macro": self.f1_macro,
             "confusion_matrix": self.confusion_matrix,
             "labels": list(self.label_order),
+            "per_class": {
+                label: dict(metrics) for label, metrics in self.per_class.items()
+            },
         }
 
 
@@ -142,6 +147,23 @@ def run_tfidf_linear(
     )
     accuracy = accuracy_score(y_test_list, predictions)
     matrix = confusion_matrix(y_test_list, predictions, labels=labels)
+    report = classification_report(
+        y_test_list,
+        predictions,
+        labels=labels,
+        output_dict=True,
+        zero_division=0,
+    )
+    per_class = {
+        label: {
+            "precision": round(float(report[label]["precision"]), _METRIC_DECIMALS),
+            "recall": round(float(report[label]["recall"]), _METRIC_DECIMALS),
+            "f1": round(float(report[label]["f1-score"]), _METRIC_DECIMALS),
+            "support": int(report[label]["support"]),
+        }
+        for label in labels
+        if label in report
+    }
 
     resolved_model = (model_config or LinearModelConfig()).name
 
@@ -154,6 +176,7 @@ def run_tfidf_linear(
         label_order=tuple(labels),
         model_name=resolved_model,
         pipeline=pipeline,
+        per_class=per_class,
     )
 
 

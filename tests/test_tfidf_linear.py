@@ -193,6 +193,7 @@ def test_result_as_dict_tem_campos_esperados(
         "f1_macro",
         "confusion_matrix",
         "labels",
+        "per_class",
     }
     assert set(result.as_dict().keys()) == expected
 
@@ -323,3 +324,82 @@ def test_run_metricas_arredondadas_4_casas(tmp_path):
     for campo in ("accuracy", "precision_macro", "recall_macro", "f1_macro"):
         val = result[campo]
         assert val == round(val, 4), f"{campo}={val} tem mais de 4 casas decimais"
+
+
+def test_read_corpus_file_extensao_invalida(tmp_path):
+    """_read_corpus_file deve levantar ValueError para extensao desconhecida."""
+    from v2.src.experiments.run_tfidf_linear import _read_corpus_file
+
+    invalid_file = tmp_path / "corpus.xlsx"
+    invalid_file.write_text("coluna")
+    with pytest.raises(ValueError, match=r"(?i)(extensao|extension|formato|format|xlsx)"):
+        _read_corpus_file(invalid_file)
+
+
+def test_read_corpus_file_csv(tmp_path):
+    """_read_corpus_file deve ler CSV com as colunas esperadas."""
+    import pandas as pd
+    from v2.src.experiments.run_tfidf_linear import _read_corpus_file
+
+    corpus = tmp_path / "corpus.csv"
+    df = pd.DataFrame(
+        {
+            "raw_text": ["bom", "ruim", "ok"],
+            "clean_text": ["bom", "ruim", "ok"],
+            "label": ["positivo", "negativo", "neutro"],
+            "source": ["b2w", "b2w", "b2w"],
+        }
+    )
+    df.to_csv(corpus, index=False)
+    result = _read_corpus_file(corpus)
+    assert set(result.columns) >= {"raw_text", "clean_text", "label", "source"}
+    assert len(result) == 3
+
+
+def test_run_retorna_per_class(tmp_path):
+    """run() deve retornar per_class com metricas por classe."""
+    import pandas as pd
+    from v2.src.experiments.run_tfidf_linear import run
+
+    rows = []
+    for lbl in ["positivo", "negativo", "neutro"]:
+        for i in range(20):
+            rows.append(
+                {
+                    "raw_text": f"{lbl} {i}",
+                    "clean_text": f"{lbl} {i}",
+                    "label": lbl,
+                    "source": "test",
+                }
+            )
+    df = pd.DataFrame(rows)
+    corpus_path = tmp_path / "corpus.csv"
+    df.to_csv(corpus_path, index=False)
+
+    result = run(corpus_path=str(corpus_path))
+    d = result.as_dict() if hasattr(result, "as_dict") else result
+    assert "per_class" in d, "per_class deve estar no resultado"
+    assert isinstance(d["per_class"], dict), "per_class deve ser dict"
+    assert len(d["per_class"]) >= 2, "per_class deve ter pelo menos 2 classes"
+    for lbl, metrics in d["per_class"].items():
+        assert "precision" in metrics and "recall" in metrics and "f1" in metrics
+
+
+def test_run_tfidf_linear_per_class_preenchido(
+    synthetic_split: tuple[list[str], list[str], list[str], list[str]],
+) -> None:
+    """run_tfidf_linear() deve popular per_class com metricas por classe."""
+    X_train, y_train, X_test, y_test = synthetic_split
+    result = run_tfidf_linear(
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        tfidf_config=TfidfConfig(min_df=1, max_df=1.0, ngram_range=(1, 1)),
+    )
+    assert isinstance(result.per_class, dict)
+    assert set(result.per_class.keys()) == set(DEFAULT_LABEL_ORDER)
+    for lbl, metrics in result.per_class.items():
+        for campo in ("precision", "recall", "f1", "support"):
+            assert campo in metrics, f"per_class[{lbl}] faltando {campo}"
+        assert isinstance(metrics["support"], int)
