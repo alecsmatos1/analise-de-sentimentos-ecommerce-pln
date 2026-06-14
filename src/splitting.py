@@ -19,8 +19,9 @@ from .data import REQUIRED_COLUMNS, coerce_corpus
 class StratifiedSplit:
     """Resultado de um split estratificado.
 
-    Os DataFrames preservam o contrato da v2 (`text`, `label`, `source`) e
-    possuem indices reiniciados para evitar surpresas em iteracoes.
+    Os DataFrames preservam o contrato da v2 (`raw_text`, `clean_text`,
+    `label`, `source`) e possuem indices reiniciados para evitar surpresas em
+    iteracoes.
     """
 
     train: pd.DataFrame

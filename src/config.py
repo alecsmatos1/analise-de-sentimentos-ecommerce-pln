@@ -24,6 +24,9 @@ class V2Config:
 
     Campos sao caminhos absolutos para evitar ambiguidade entre execucoes em
     diretorios diferentes. `seed` e `test_size` sao usados pelo split comum.
+    `label_order` define a ordem canonica das classes (negativo, neutro,
+    positivo) usada pelas matrizes de confusao e relatorios das sprints de
+    avaliacao das ondas seguintes; nao remover sem migrar quem consome.
     """
 
     repo_root: Path = REPO_ROOT

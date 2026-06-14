@@ -12,10 +12,10 @@ from v2.src.splitting import StratifiedSplit, stratified_split
 def _balanced_fixture(per_class: int = 10) -> pd.DataFrame:
     rows = []
     for i in range(per_class):
-        rows.append((f"texto positivo {i}", LABEL_POSITIVE, "b2w"))
-        rows.append((f"texto negativo {i}", LABEL_NEGATIVE, "olist"))
-        rows.append((f"texto neutro {i}", LABEL_NEUTRAL, "meli"))
-    return pd.DataFrame(rows, columns=["text", "label", "source"])
+        rows.append((f"texto positivo {i}", f"texto positivo {i}", LABEL_POSITIVE, "b2w"))
+        rows.append((f"texto negativo {i}", f"texto negativo {i}", LABEL_NEGATIVE, "olist"))
+        rows.append((f"texto neutro {i}", f"texto neutro {i}", LABEL_NEUTRAL, "meli"))
+    return pd.DataFrame(rows, columns=["raw_text", "clean_text", "label", "source"])
 
 
 def test_stratified_split_preserva_proporcoes_e_tamanho():
@@ -53,11 +53,12 @@ def test_stratified_split_difere_com_seed_diferente():
     assert different
 
 
-def test_stratified_split_mantem_contrato_minimo_de_colunas():
+def test_stratified_split_mantem_contrato_de_quatro_colunas():
     df = _balanced_fixture()
     split = stratified_split(df)
     assert list(split.train.columns) == list(REQUIRED_COLUMNS)
     assert list(split.test.columns) == list(REQUIRED_COLUMNS)
+    assert len(REQUIRED_COLUMNS) == 4
 
 
 def test_stratified_split_falha_com_test_size_invalido():
@@ -71,7 +72,8 @@ def test_stratified_split_falha_com_test_size_invalido():
 def test_stratified_split_falha_se_classe_tem_um_exemplo():
     df = pd.DataFrame(
         {
-            "text": ["a", "b", "c", "d", "e"],
+            "raw_text": ["a", "b", "c", "d", "e"],
+            "clean_text": ["a", "b", "c", "d", "e"],
             "label": [
                 LABEL_POSITIVE,
                 LABEL_POSITIVE,
@@ -87,6 +89,13 @@ def test_stratified_split_falha_se_classe_tem_um_exemplo():
 
 
 def test_stratified_split_falha_com_corpus_vazio_apos_coercao():
-    df = pd.DataFrame({"text": ["", ""], "label": ["x", "y"], "source": ["b2w", "olist"]})
+    df = pd.DataFrame(
+        {
+            "raw_text": ["", ""],
+            "clean_text": ["", ""],
+            "label": ["x", "y"],
+            "source": ["b2w", "olist"],
+        }
+    )
     with pytest.raises(ValueError, match="corpus vazio"):
         stratified_split(df)

@@ -2,13 +2,18 @@
 
 A v2 reusa o mapeamento por nota da v1 para padronizar os rotulos em
 `negativo`, `neutro` e `positivo` (ver `data_processing.rating_to_label`), mas
-mantem um contrato minimo proprio para evitar acoplamento com a estrutura
-historica de `OUTPUT_COLUMNS`. Cada experimento da v2 deve consumir DataFrames
-que respeitem `REQUIRED_COLUMNS`.
+mantem um contrato proprio para evitar acoplamento com a estrutura historica de
+`OUTPUT_COLUMNS`. Cada experimento da v2 deve consumir DataFrames que respeitem
+`REQUIRED_COLUMNS`: o corpus expoe `raw_text` (texto preservado, usado por
+BERTimbau, LLM e analisadores que precisam de pontuacao/acentos) e
+`clean_text` (texto normalizado para representacoes esparsas como TF-IDF e
+agregacoes Word2Vec). Veja `v2/arquitetura.md` para a justificativa.
 """
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import Iterable
 
 import pandas as pd
@@ -20,7 +25,12 @@ LABEL_POSITIVE = "positivo"
 
 SENTIMENT_LABELS: tuple[str, ...] = (LABEL_NEGATIVE, LABEL_NEUTRAL, LABEL_POSITIVE)
 
-REQUIRED_COLUMNS: tuple[str, ...] = ("text", "label", "source")
+REQUIRED_COLUMNS: tuple[str, ...] = ("raw_text", "clean_text", "label", "source")
+
+_REQUIRED_INPUT_COLUMNS: tuple[str, ...] = ("raw_text", "label", "source")
+
+_NON_ALPHANUMERIC = re.compile(r"[^a-z0-9\s]")
+_WHITESPACE = re.compile(r"\s+")
 
 
 def rating_to_label(rating: int | float) -> str:
@@ -47,34 +57,57 @@ def rating_to_label(rating: int | float) -> str:
     return ""
 
 
+def normalize_text(text: str) -> str:
+    """Normaliza texto para uso em representacoes esparsas (TF-IDF).
+
+    Aplica lowercase, remove acentos via decomposicao NFD, descarta qualquer
+    caractere que nao seja letra ASCII, digito ou espaco, e colapsa espacos.
+    Usa somente a stdlib para manter o contrato sem dependencias extras.
+    """
+
+    text = text.lower()
+    text = unicodedata.normalize("NFD", text)
+    text = "".join(ch for ch in text if unicodedata.category(ch) != "Mn")
+    text = _NON_ALPHANUMERIC.sub(" ", text)
+    text = _WHITESPACE.sub(" ", text).strip()
+    return text
+
+
 def coerce_corpus(
     df: pd.DataFrame,
     *,
-    allowed_labels: Iterable[str] = SENTIMENT_LABELS,
+    allowed_labels: Iterable[str] | None = SENTIMENT_LABELS,
 ) -> pd.DataFrame:
     """Valida e normaliza um DataFrame para o contrato da v2.
 
-    Garante que existam as colunas `text`, `label` e `source`, remove linhas com
-    texto vazio ou rotulo fora de `allowed_labels`, e retorna uma copia ordenada
-    com apenas essas colunas. Nao faz limpeza linguistica; isso e
-    responsabilidade dos modulos de representacao (TF-IDF, etc.).
+    Exige `raw_text`, `label` e `source` no DataFrame de entrada. Se
+    `clean_text` ja estiver presente, e mantido sem reprocessar (para permitir
+    pre-calculo por cache ou pipelines externos); caso contrario, e gerado a
+    partir de `raw_text` via `normalize_text`. Remove linhas com `raw_text`
+    vazio ou rotulo fora de `allowed_labels`, e retorna uma copia com exatamente
+    as colunas de `REQUIRED_COLUMNS` na ordem canonica.
     """
 
-    missing = [column for column in REQUIRED_COLUMNS if column not in df.columns]
+    missing = [column for column in _REQUIRED_INPUT_COLUMNS if column not in df.columns]
     if missing:
         raise ValueError(
             f"corpus invalido: colunas obrigatorias ausentes {missing}"
         )
 
-    allowed = set(allowed_labels)
+    allowed = set(allowed_labels) if allowed_labels is not None else set(SENTIMENT_LABELS)
     if not allowed:
         raise ValueError("allowed_labels nao pode ser vazio")
 
-    cleaned = df.loc[:, list(REQUIRED_COLUMNS)].copy()
-    cleaned["text"] = cleaned["text"].fillna("").astype(str).str.strip()
+    cleaned = df.copy()
+    cleaned["raw_text"] = cleaned["raw_text"].fillna("").astype(str).str.strip()
     cleaned["label"] = cleaned["label"].fillna("").astype(str).str.strip()
     cleaned["source"] = cleaned["source"].fillna("").astype(str).str.strip()
 
-    mask = cleaned["text"].str.len().gt(0) & cleaned["label"].isin(allowed)
-    cleaned = cleaned.loc[mask].reset_index(drop=True)
+    if "clean_text" in cleaned.columns:
+        cleaned["clean_text"] = cleaned["clean_text"].fillna("").astype(str)
+    else:
+        cleaned["clean_text"] = cleaned["raw_text"].apply(normalize_text)
+
+    mask = cleaned["raw_text"].str.len().gt(0) & cleaned["label"].isin(allowed)
+    cleaned = cleaned.loc[mask, list(REQUIRED_COLUMNS)].reset_index(drop=True)
     return cleaned

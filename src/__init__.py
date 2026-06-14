@@ -13,6 +13,7 @@ from .data import (
     REQUIRED_COLUMNS,
     SENTIMENT_LABELS,
     coerce_corpus,
+    normalize_text,
     rating_to_label,
 )
 from .splitting import StratifiedSplit, stratified_split
@@ -27,6 +28,7 @@ __all__ = [
     "V2Config",
     "coerce_corpus",
     "default_config",
+    "normalize_text",
     "rating_to_label",
     "stratified_split",
 ]
