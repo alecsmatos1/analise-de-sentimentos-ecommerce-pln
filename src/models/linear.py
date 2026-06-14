@@ -33,6 +33,7 @@ def build_linear_model(config: Optional[LinearModelConfig] = None) -> LinearEsti
     cfg = config or LinearModelConfig()
     if cfg.name == "logistic_regression":
         return LogisticRegression(
+            solver="lbfgs",
             class_weight=cfg.class_weight,
             random_state=cfg.random_state,
             max_iter=cfg.max_iter,
