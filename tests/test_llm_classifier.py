@@ -1,4 +1,4 @@
-"""Testes do contrato LLMClassifier (mock da API Gemini)."""
+"""Testes do contrato LLMClassifier (mock da API OpenAI)."""
 from __future__ import annotations
 
 import sys
@@ -20,11 +20,11 @@ from v2.src.models.llm_classifier import (
 
 
 def _make_mock_client(response_text: str) -> MagicMock:
-    """Cria mock do genai.Client que retorna response_text fixo."""
+    """Cria mock do OpenAI que retorna response_text fixo."""
     client = MagicMock()
-    response = MagicMock()
-    response.text = response_text
-    client.models.generate_content.return_value = response
+    choice = MagicMock()
+    choice.message.content = response_text
+    client.chat.completions.create.return_value.choices = [choice]
     return client
 
 
@@ -32,7 +32,7 @@ def _make_mock_client(response_text: str) -> MagicMock:
 def clf_mock_positivo():
     clf = LLMClassifier()
     clf._client = _make_mock_client('{"label": "positivo"}')
-    with patch.dict("os.environ", {"GOOGLE_API_KEY": "mock-key"}):
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "mock-key"}):
         yield clf
 
 
@@ -44,10 +44,10 @@ def test_predict_retorna_label_valido(clf_mock_positivo):
 
 
 def test_predict_normaliza_resposta_com_pontuacao():
-    """Resposta JSON com capitalização deve ser normalizada."""
+    """Resposta JSON com capitalizacao deve ser normalizada."""
     clf = LLMClassifier()
     clf._client = _make_mock_client('{"label": "Positivo"}')
-    with patch.dict("os.environ", {"GOOGLE_API_KEY": "mock-key"}):
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "mock-key"}):
         assert clf.predict_one("texto") == "positivo"
 
 
@@ -55,18 +55,17 @@ def test_predict_fallback_para_resposta_invalida():
     """Resposta invalida deve retornar o fallback_label."""
     clf = LLMClassifier(LLMConfig(fallback_label="neutro"))
     clf._client = _make_mock_client('{"label": "desconhecido"}')
-    with patch.dict("os.environ", {"GOOGLE_API_KEY": "mock-key"}):
+    with patch.dict("os.environ", {"OPENAI_API_KEY": "mock-key"}):
         result = clf.predict_one("texto ambiguo")
     assert result == "neutro"
 
 
 def test_sem_api_key_lanca_erro(monkeypatch):
-    """EnvironmentError quando GOOGLE_API_KEY nao esta definida."""
-    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-    monkeypatch.setitem(sys.modules, "google", MagicMock())
-    monkeypatch.setitem(sys.modules, "google.genai", MagicMock())
+    """EnvironmentError quando OPENAI_API_KEY nao esta definida."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setitem(sys.modules, "openai", MagicMock())
     clf = LLMClassifier()
-    with pytest.raises(EnvironmentError, match="GOOGLE_API_KEY"):
+    with pytest.raises(EnvironmentError, match="OPENAI_API_KEY"):
         clf._classify_one("texto")
 
 
