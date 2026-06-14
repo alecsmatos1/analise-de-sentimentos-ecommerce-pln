@@ -41,3 +41,25 @@ Ordem esperada:
 1. Codigo interno sem integracao externa: dados, split, TF-IDF, modelo linear, avaliacao, CLI e testes.
 2. Contratos locais para recursos externos, ainda com mocks/stubs.
 3. Integracoes reais com NILC, BERTimbau e LLM.
+
+## Testes internos
+
+A v2 possui uma suite de testes em `v2/tests/` que valida os contratos comuns das ondas: colunas minimas, conjunto de rotulos e mapeamento de nota para classe. A suite e leve, nao baixa modelos e nao depende de NILC, BERTimbau, LLM ou datasets brutos.
+
+Para rodar a suite localmente, a partir da raiz do repositorio:
+
+```powershell
+python -m pytest v2/tests
+```
+
+Notas:
+
+- A fixture demonstrativa em `v2/tests/fixtures/` contem textos sinteticos, nao reviews comerciais reais.
+- O contrato verificado pelos testes considera `raw_text`, `clean_text`, `label` e `source` como colunas obrigatorias, e os rotulos `positivo`, `neutro` e `negativo` como conjunto fechado.
+- Novas ondas que precisem ampliar o contrato devem atualizar primeiro os testes em `v2/tests/test_contracts.py` e a fixture correspondente.
+
+> **Nota sobre `conftest.py`**: As constantes `REQUIRED_COLUMNS` e `ALLOWED_LABELS`
+> sao importadas de `v2.src.data` quando disponiveis (apos merge das sprints). Em
+> worktrees isolados, valores locais sao usados como fallback. O teste
+> `test_required_columns_consistente_com_src_data` verifica automaticamente
+> a consistencia apos integracao.
