@@ -24,6 +24,36 @@ DEFAULT_LABEL_ORDER: tuple[str, ...] = ("negativo", "neutro", "positivo")
 _METRIC_DECIMALS = 4
 
 
+def _read_corpus_file(path: Path) -> pd.DataFrame:
+    """Le o arquivo de corpus detectando o formato pela extensao.
+
+    Args:
+        path: caminho para o arquivo.
+
+    Returns:
+        DataFrame cru (antes de coerce_corpus).
+
+    Raises:
+        ValueError: se a extensao nao for suportada.
+    """
+
+    import pandas as pd
+
+    supported_formats = {
+        ".csv": pd.read_csv,
+        ".parquet": pd.read_parquet,
+    }
+    ext = path.suffix.lower()
+    reader = supported_formats.get(ext)
+    if reader is None:
+        supported = ", ".join(supported_formats)
+        raise ValueError(
+            f"Formato nao suportado: '{ext}' em '{path.name}'. "
+            f"Formatos suportados: {supported}."
+        )
+    return reader(path)
+
+
 @dataclass(frozen=True)
 class TfidfLinearResult:
     """Resultado do experimento TF-IDF + linear.
@@ -146,8 +176,6 @@ def run(corpus_path: Union[Path, str, None] = None) -> dict:
             em ``config``, ou se o arquivo apontado nao existir.
     """
 
-    import pandas as pd
-
     from .. import config as _config
     from ..data import coerce_corpus
     from ..splitting import stratified_split
@@ -167,10 +195,7 @@ def run(corpus_path: Union[Path, str, None] = None) -> dict:
             "Prepare o corpus processado antes de executar o experimento."
         )
 
-    if corpus_path.suffix.lower() == ".csv":
-        df = pd.read_csv(corpus_path)
-    else:
-        df = pd.read_parquet(corpus_path)
+    df = _read_corpus_file(corpus_path)
 
     corpus = coerce_corpus(df)
     split = stratified_split(corpus)
