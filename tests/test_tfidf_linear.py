@@ -234,3 +234,46 @@ def test_result_as_dict_nao_contem_pipeline(
         tfidf_config=TfidfConfig(min_df=1, max_df=1.0, ngram_range=(1, 1)),
     )
     assert "pipeline" not in result.as_dict()
+
+
+def test_run_corpus_inexistente_levanta_filenotfounderror(tmp_path) -> None:
+    """run() com corpus_path invalido deve levantar FileNotFoundError clara."""
+    from v2.src.experiments.run_tfidf_linear import run
+
+    with pytest.raises(FileNotFoundError, match="nao encontrado"):
+        run(corpus_path=tmp_path / "inexistente.csv")
+
+
+def test_as_dict_labels_eh_list(
+    synthetic_split: tuple[list[str], list[str], list[str], list[str]],
+) -> None:
+    """as_dict() deve retornar labels como list, nao tuple — consistente com reporting.py."""
+    X_train, y_train, X_test, y_test = synthetic_split
+    result = run_tfidf_linear(
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        tfidf_config=TfidfConfig(min_df=1, max_df=1.0, ngram_range=(1, 1)),
+    )
+    assert isinstance(result.as_dict()["labels"], list)
+
+
+def test_as_dict_metricas_com_4_casas(
+    synthetic_split: tuple[list[str], list[str], list[str], list[str]],
+) -> None:
+    """Metricas em as_dict() devem ter no maximo 4 casas decimais."""
+    X_train, y_train, X_test, y_test = synthetic_split
+    result = run_tfidf_linear(
+        X_train,
+        y_train,
+        X_test,
+        y_test,
+        tfidf_config=TfidfConfig(min_df=1, max_df=1.0, ngram_range=(1, 1)),
+    )
+    payload = result.as_dict()
+    for field in ("accuracy", "precision_macro", "recall_macro", "f1_macro"):
+        val = payload[field]
+        assert val == round(val, 4), (
+            f"{field}={val} tem mais de 4 casas decimais"
+        )
