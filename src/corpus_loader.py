@@ -52,23 +52,11 @@ def _load_mercadolivre() -> pd.DataFrame:
     return df[["raw_text", "label", "source"]].dropna(subset=["raw_text", "label"])
 
 
-def load_corpus(
-    sources: list[str] | None = None,
-    min_per_class: int | None = None,
-    max_per_class: int | None = None,
-) -> pd.DataFrame:
-    """Carrega e unifica os corpora reais, retornando DataFrame no formato canonico.
+def _load_all(sources: list[str] | None = None) -> pd.DataFrame:
+    """Carrega e concatena todas as fontes solicitadas e aplica coerce_corpus().
 
-    Args:
-        sources: lista de fontes a incluir ('b2w', 'olist', 'mercadolivre').
-            None = todas.
-        min_per_class: descarta classes com menos de N exemplos apos coercao.
-        max_per_class: limita a N exemplos por classe (amostragem aleatoria,
-            seed=42 para reprodutibilidade).
-
-    Returns:
-        DataFrame com colunas (raw_text, clean_text, label, source) validado
-        por coerce_corpus().
+    Helper interno para isolar a etapa de IO/coercao da etapa de filtragem
+    (max_per_class/balanced). Tambem facilita monkeypatch em testes.
     """
     loaders = {
         "b2w": _load_b2w,
@@ -83,22 +71,56 @@ def load_corpus(
         raise ValueError(f"Nenhuma fonte valida em: {sources}")
 
     raw = pd.concat(parts, ignore_index=True)
-    df = coerce_corpus(raw)
+    return coerce_corpus(raw)
+
+
+def load_corpus(
+    sources: list[str] | None = None,
+    min_per_class: int | None = None,
+    max_per_class: int | None = None,
+    balanced: bool = False,
+    random_state: int = 42,
+) -> pd.DataFrame:
+    """Carrega e unifica os corpora reais, retornando DataFrame no formato canonico.
+
+    Args:
+        sources: lista de fontes a incluir ('b2w', 'olist', 'mercadolivre').
+            None = todas.
+        min_per_class: descarta classes com menos de N exemplos apos coercao.
+        max_per_class: limita a N exemplos por classe (amostragem aleatoria).
+        balanced: quando True e `max_per_class` e None, define
+            `max_per_class` como o tamanho da menor classe, igualando as
+            contagens via undersampling simples.
+        random_state: seed usada na amostragem por classe e no shuffle final.
+
+    Returns:
+        DataFrame com colunas (raw_text, clean_text, label, source) validado
+        por coerce_corpus().
+    """
+    df = _load_all(sources)
 
     if min_per_class is not None:
         counts = df["label"].value_counts()
         valid = counts[counts >= min_per_class].index
         df = df[df["label"].isin(valid)]
 
+    if balanced and max_per_class is None:
+        counts = df["label"].value_counts()
+        max_per_class = int(counts.min())
+
     if max_per_class is not None:
         # pandas 3.x exclui a coluna de agrupamento do resultado de groupby+apply;
         # iterar explicitamente preserva o contrato (raw_text, clean_text, label,
         # source) sem depender de comportamento que mudou entre versoes.
         parts_sampled = [
-            group.sample(min(len(group), max_per_class), random_state=42)
+            group.sample(min(len(group), max_per_class), random_state=random_state)
             for _, group in df.groupby("label", sort=False)
         ]
-        df = pd.concat(parts_sampled, ignore_index=True)
+        df = (
+            pd.concat(parts_sampled, ignore_index=True)
+            .sample(frac=1, random_state=random_state)
+            .reset_index(drop=True)
+        )
 
     return df
 
