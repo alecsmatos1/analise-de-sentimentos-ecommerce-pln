@@ -27,6 +27,12 @@ if str(_SRC_DIR) not in sys.path:
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(_REPO_ROOT / ".env")
+except ImportError:
+    pass
+
 import evaluation  # noqa: E402  (path-injection-dependent import)
 import reporting  # noqa: E402
 import reporting_compare  # noqa: E402

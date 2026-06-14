@@ -43,24 +43,24 @@ class LLMConfig:
 class LLMClassifier:
     """Classificador zero-shot via Google Gemini (JSON estruturado).
 
-    Nao carrega o modelo no __init__ — somente na primeira chamada a
+    Nao carrega o cliente no __init__ — somente na primeira chamada a
     predict(), para permitir testes com mock sem a biblioteca instalada.
     """
 
     def __init__(self, config: LLMConfig | None = None) -> None:
         self.config = config or LLMConfig()
-        self._model = None
+        self._client = None
 
-    def _get_model(self):
-        """Instancia o modelo Gemini, lendo a chave do ambiente."""
-        if self._model is not None:
-            return self._model
+    def _get_client(self):
+        """Instancia o cliente Gemini, lendo a chave do ambiente."""
+        if self._client is not None:
+            return self._client
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError as exc:
             raise ImportError(
-                "google-generativeai nao esta instalado. "
-                "Execute: pip install google-generativeai"
+                "google-genai nao esta instalado. "
+                "Execute: pip install google-genai"
             ) from exc
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
@@ -68,17 +68,8 @@ class LLMClassifier:
                 "GOOGLE_API_KEY nao definida. "
                 "Configure a variavel de ambiente antes de executar o experimento LLM."
             )
-        genai.configure(api_key=api_key)
-        generation_config = genai.GenerationConfig(
-            temperature=self.config.temperature,
-            response_mime_type="application/json",
-            response_schema=_RESPONSE_SCHEMA,
-        )
-        self._model = genai.GenerativeModel(
-            model_name=self.config.model,
-            generation_config=generation_config,
-        )
-        return self._model
+        self._client = genai.Client(api_key=api_key)
+        return self._client
 
     def _parse_response(self, raw: str) -> str:
         """Extrai label do JSON retornado pelo Gemini."""
@@ -89,7 +80,6 @@ class LLMClassifier:
                 return label
         except (json.JSONDecodeError, AttributeError):
             pass
-        # fallback: varrer tokens para qualquer label válido
         for token in re.split(r'[\s,.\-"\'{}:]+', raw.lower()):
             if token in ALLOWED_LABELS:
                 return token
@@ -97,12 +87,23 @@ class LLMClassifier:
 
     def _classify_one(self, text: str) -> str:
         """Envia um texto para a API e retorna o label normalizado."""
-        model = self._get_model()
+        from google.genai import types
+
+        client = self._get_client()
         prompt = self.config.prompt_template.format(text=text[:1000])
+        config = types.GenerateContentConfig(
+            temperature=self.config.temperature,
+            response_mime_type="application/json",
+            response_schema=_RESPONSE_SCHEMA,
+        )
 
         for attempt in range(self.config.retry_attempts):
             try:
-                response = model.generate_content(prompt)
+                response = client.models.generate_content(
+                    model=self.config.model,
+                    contents=prompt,
+                    config=config,
+                )
                 return self._parse_response(response.text)
             except Exception:
                 if attempt < self.config.retry_attempts - 1:
