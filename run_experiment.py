@@ -11,7 +11,7 @@ datasets.
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import importlib
 import platform
 import sys
 import time
@@ -21,8 +21,11 @@ from typing import Sequence
 
 _THIS_DIR = Path(__file__).resolve().parent
 _SRC_DIR = _THIS_DIR / "src"
+_REPO_ROOT = _THIS_DIR.parent
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 import evaluation  # noqa: E402  (path-injection-dependent import)
 import reporting  # noqa: E402
@@ -102,27 +105,65 @@ def _run_tfidf_fixture(seed: int) -> tuple[evaluation.EvaluationResult, dict]:
 
 
 def _load_tfidf_module():
-    """Carrega run_tfidf_linear pelo caminho do arquivo, sem depender de pacote."""
-    # v2/ e v2/src/ nao expoem __init__.py, entao importlib.import_module
-    # ("v2.src.experiments.run_tfidf_linear") nao resolve. Usar
-    # spec_from_file_location evita a necessidade de transformar v2 em pacote.
+    """Carrega run_tfidf_linear via import absoluto.
+
+    ``v2/src/experiments/run_tfidf_linear.py`` usa imports relativos
+    (``from ..models.linear import ...``), entao precisa ser carregado como
+    parte do pacote ``v2.src.experiments``. O proprio modulo CLI ja insere
+    ``_REPO_ROOT`` em ``sys.path``, o que torna ``v2`` resolvivel como
+    namespace package (PEP 420).
+    """
+
     mod_path = _SRC_DIR / "experiments" / "run_tfidf_linear.py"
     if not mod_path.exists():
         raise SystemExit(
             "Experimento tfidf-linear sem --fixture exige "
             f"{mod_path} (sprint TF-IDF linear). Arquivo nao encontrado."
         )
-    spec = importlib.util.spec_from_file_location("run_tfidf_linear", mod_path)
-    if spec is None or spec.loader is None:  # pragma: no cover - defensivo
+    return importlib.import_module("v2.src.experiments.run_tfidf_linear")
+
+
+def _coerce_runner_result(payload: object) -> evaluation.EvaluationResult:
+    """Converte o retorno de ``run()`` em ``EvaluationResult``.
+
+    Aceita um ``EvaluationResult`` (compatibilidade) ou um dict com o contrato
+    de ``TfidfLinearResult.as_dict()``.
+    """
+
+    if isinstance(payload, evaluation.EvaluationResult):
+        return payload
+    if not isinstance(payload, dict):
         raise SystemExit(
-            f"Nao foi possivel preparar o loader para {mod_path}."
+            "run() de tfidf-linear deve retornar dict ou EvaluationResult; "
+            f"recebido {type(payload).__name__}."
         )
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    missing = [
+        key
+        for key in (
+            "accuracy",
+            "precision_macro",
+            "recall_macro",
+            "f1_macro",
+            "confusion_matrix",
+        )
+        if key not in payload
+    ]
+    if missing:
+        raise SystemExit(
+            f"run() de tfidf-linear retornou dict incompleto; faltam: {missing}"
+        )
+    labels = tuple(payload.get("labels") or evaluation.LABELS)
+    return evaluation.EvaluationResult(
+        accuracy=float(payload["accuracy"]),
+        precision_macro=float(payload["precision_macro"]),
+        recall_macro=float(payload["recall_macro"]),
+        f1_macro=float(payload["f1_macro"]),
+        confusion_matrix=[[int(v) for v in row] for row in payload["confusion_matrix"]],
+        labels=labels,
+    )
 
 
-def _run_tfidf_full() -> tuple[evaluation.EvaluationResult, dict]:
+def _run_tfidf_full(corpus_path: Path | None = None) -> tuple[evaluation.EvaluationResult, dict]:
     module = _load_tfidf_module()
 
     runner = getattr(module, "run", None)
@@ -130,15 +171,15 @@ def _run_tfidf_full() -> tuple[evaluation.EvaluationResult, dict]:
         raise SystemExit(
             "run_tfidf_linear precisa expor uma funcao run()"
         )
-    payload = runner()
+    payload = runner(corpus_path=corpus_path)
     if isinstance(payload, tuple) and len(payload) == 2:
-        result, meta = payload
+        raw_result, meta = payload
     else:
-        result, meta = payload, {}
+        raw_result, meta = payload, {}
     if not isinstance(meta, dict):
         meta = {}
     meta.setdefault("mode", "full")
-    return result, meta
+    return _coerce_runner_result(raw_result), meta
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -173,6 +214,15 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Calcula metricas sem persistir arquivos (uso de inspecao rapida).",
     )
+    parser.add_argument(
+        "--corpus-path",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Caminho para o corpus processado (CSV ou parquet). "
+            "Requerido no modo nao-fixture."
+        ),
+    )
     return parser
 
 
@@ -195,7 +245,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.fixture:
             result, meta = _run_tfidf_fixture(args.seed)
         else:
-            result, meta = _run_tfidf_full()
+            corpus_path = Path(args.corpus_path) if args.corpus_path else None
+            result, meta = _run_tfidf_full(corpus_path=corpus_path)
     else:  # pragma: no cover - guarded by argparse choices
         raise SystemExit(f"Experimento nao suportado: {args.experiment}")
 

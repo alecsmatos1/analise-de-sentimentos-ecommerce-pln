@@ -7,7 +7,8 @@ recursos, nao escreve em disco e nao depende de modulos externos a `v2/`.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Sequence
+from pathlib import Path
+from typing import Optional, Sequence, Union
 
 from sklearn.metrics import (
     accuracy_score,
@@ -20,6 +21,7 @@ from ..models.linear import LinearModelConfig, build_linear_model
 from ..representations.tfidf import TfidfConfig, build_tfidf
 
 DEFAULT_LABEL_ORDER: tuple[str, ...] = ("negativo", "neutro", "positivo")
+_METRIC_DECIMALS = 4
 
 
 @dataclass(frozen=True)
@@ -49,7 +51,7 @@ class TfidfLinearResult:
             "recall_macro": self.recall_macro,
             "f1_macro": self.f1_macro,
             "confusion_matrix": self.confusion_matrix,
-            "labels": self.label_order,
+            "labels": list(self.label_order),
         }
 
 
@@ -114,10 +116,10 @@ def run_tfidf_linear(
     resolved_model = (model_config or LinearModelConfig()).name
 
     return TfidfLinearResult(
-        accuracy=float(accuracy),
-        precision_macro=float(precision),
-        recall_macro=float(recall),
-        f1_macro=float(f1),
+        accuracy=round(float(accuracy), _METRIC_DECIMALS),
+        precision_macro=round(float(precision), _METRIC_DECIMALS),
+        recall_macro=round(float(recall), _METRIC_DECIMALS),
+        f1_macro=round(float(f1), _METRIC_DECIMALS),
         confusion_matrix=matrix.tolist(),
         label_order=tuple(labels),
         model_name=resolved_model,
@@ -125,9 +127,67 @@ def run_tfidf_linear(
     )
 
 
+def run(corpus_path: Union[Path, str, None] = None) -> dict:
+    """Entry point para `run_experiment.py` no modo nao-fixture.
+
+    Carrega o corpus processado, faz split estratificado, treina e avalia o
+    pipeline TF-IDF + modelo linear.
+
+    Args:
+        corpus_path: caminho para o CSV/parquet do corpus processado. Se
+            ``None``, tenta usar ``v2.src.config.PROCESSED_CORPUS_PATH``.
+
+    Returns:
+        dict serializavel compativel com ``reporting.save_all`` (mesmo
+        contrato de ``TfidfLinearResult.as_dict()``).
+
+    Raises:
+        FileNotFoundError: se o corpus nao for fornecido nem estiver definido
+            em ``config``, ou se o arquivo apontado nao existir.
+    """
+
+    import pandas as pd
+
+    from .. import config as _config
+    from ..data import coerce_corpus
+    from ..splitting import stratified_split
+
+    if corpus_path is None:
+        corpus_path = getattr(_config, "PROCESSED_CORPUS_PATH", None)
+    if corpus_path is None:
+        raise FileNotFoundError(
+            "corpus_path nao fornecido e config.PROCESSED_CORPUS_PATH nao "
+            "definido. Use --corpus-path ou defina PROCESSED_CORPUS_PATH em "
+            "config.py."
+        )
+    corpus_path = Path(corpus_path)
+    if not corpus_path.exists():
+        raise FileNotFoundError(
+            f"Corpus nao encontrado: {corpus_path}. "
+            "Prepare o corpus processado antes de executar o experimento."
+        )
+
+    if corpus_path.suffix.lower() == ".csv":
+        df = pd.read_csv(corpus_path)
+    else:
+        df = pd.read_parquet(corpus_path)
+
+    corpus = coerce_corpus(df)
+    split = stratified_split(corpus)
+
+    result = run_tfidf_linear(
+        split.train["clean_text"].tolist(),
+        split.train["label"].tolist(),
+        split.test["clean_text"].tolist(),
+        split.test["label"].tolist(),
+    )
+    return result.as_dict()
+
+
 __all__ = [
     "DEFAULT_LABEL_ORDER",
     "TfidfLinearResult",
     "build_tfidf_linear_pipeline",
+    "run",
     "run_tfidf_linear",
 ]
