@@ -7,12 +7,16 @@ from typing import Sequence
 
 import numpy as np
 
+# Caminho absoluto para o diretório de embeddings NILC, independente do CWD
+_NILC_DIR = Path(__file__).resolve().parents[3] / "v2" / "data" / "embeddings" / "nilc"
+_DEFAULT_MODEL_PATH = _NILC_DIR / "cbow_s300.bin"
+
 
 @dataclass(frozen=True)
 class Word2VecConfig:
     """Configuracao do vectorizer Word2Vec NILC."""
 
-    model_path: Path = Path("data/embeddings/nilc/cbow_s300.bin")
+    model_path: Path = _DEFAULT_MODEL_PATH
     vector_size: int = 300
     unknown_strategy: str = "zeros"  # "zeros" | "random"
     random_state: int = 42
@@ -30,20 +34,44 @@ class Word2VecVectorizer:
         self._model = None
 
     def _load_model(self) -> None:
-        """Carrega o modelo binario NILC via gensim."""
+        """Carrega o modelo NILC — suporta safetensors (HuggingFace) ou .bin (gensim)."""
+        model_dir = Path(self.config.model_path).parent
+        safetensors_path = model_dir / "embeddings.safetensors"
+        vocab_path = model_dir / "vocab.txt"
+        binary_path = Path(self.config.model_path)
+
+        if safetensors_path.exists() and vocab_path.exists():
+            self._load_from_safetensors(safetensors_path, vocab_path)
+        elif binary_path.exists():
+            self._load_from_binary(binary_path)
+        else:
+            raise FileNotFoundError(
+                f"Vetores NILC nao encontrados. Esperado:\n"
+                f"  (a) {safetensors_path} + {vocab_path}  "
+                "[HuggingFace: nilc-nlp/word2vec-cbow-300d]\n"
+                f"  (b) {binary_path}  [formato gensim binario]"
+            )
+
+    def _load_from_safetensors(self, emb_path: Path, vocab_path: Path) -> None:
+        try:
+            from safetensors.numpy import load_file
+        except ImportError as exc:
+            raise ImportError(
+                "safetensors nao esta instalado. Execute: pip install safetensors"
+            ) from exc
+        tensors = load_file(str(emb_path))
+        matrix = tensors[next(iter(tensors))].astype(np.float32)
+        with open(vocab_path, encoding="utf-8") as fh:
+            words = [line.strip() for line in fh if line.strip()]
+        self._model = dict(zip(words, matrix))
+
+    def _load_from_binary(self, path: Path) -> None:
         try:
             from gensim.models import KeyedVectors
         except ImportError as exc:
             raise ImportError(
                 "gensim nao esta instalado. Execute: pip install gensim"
             ) from exc
-        path = Path(self.config.model_path)
-        if not path.exists():
-            raise FileNotFoundError(
-                f"Vetores NILC nao encontrados em '{path}'. "
-                "Baixe em: http://nilc.icmc.usp.br/embeddings (cbow_s300.zip) "
-                "e descompacte em data/embeddings/nilc/cbow_s300.bin"
-            )
         self._model = KeyedVectors.load_word2vec_format(str(path), binary=True)
 
     def _vectorize_text(self, text: str) -> np.ndarray:
