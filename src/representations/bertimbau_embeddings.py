@@ -1,11 +1,20 @@
 """Representacao BERTimbau como extrator de embeddings congelados."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Sequence
 
 import numpy as np
+
+
+def _auto_device() -> str:
+    """Retorna 'cuda' se disponivel, senao 'cpu'."""
+    try:
+        import torch
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    except ImportError:
+        return "cpu"
 
 
 @dataclass(frozen=True)
@@ -14,7 +23,7 @@ class BertimbauConfig:
     model_name: str = "neuralmind/bert-base-portuguese-cased"
     max_length: int = 128
     batch_size: int = 32
-    device: str = "cpu"
+    device: str = field(default_factory=_auto_device)
     cache_dir: str | None = None
     vector_size: int = 768
 
